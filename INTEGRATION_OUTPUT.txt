@@ -1,0 +1,3 @@
+SIGINT subprocess test (Linux build host): exit 130; interrupted metadata; all simulator workers closed.
+12-second wall-clock simulator run: completed; all 11 analog/RTD channels and water counter present.
+CSV export: succeeded. SQLite quick_check: ok.

@@ -1,0 +1,250 @@
+schema_version: 1
+simulation_only: true
+run:
+  label: SIMULATION
+  operator: ''
+  notes: Synthetic demonstration only. These ranges are NOT specifications of the
+    delivered sensors.
+hardware:
+  chassis: cDAQ1
+  rtd_module: cDAQ1Mod1
+  analog_module: cDAQ1Mod2
+  counter_module: cDAQ1Mod3
+  counter_channel: cDAQ1Mod3/ctr0
+  pulse_terminal: /cDAQ1Mod3/PFI0
+checks:
+  wiring_verified: false
+  sensor_supplies_verified: false
+  rtd_curve_verified: false
+  hall_logic_verified: false
+sampling:
+  rtd_hz: 1.0
+  analog_hz: 10.0
+  counter_poll_hz: 2.0
+  flow_window_s: 10.0
+  buffer_seconds: 60.0
+  idle_timeout_s: 10.0
+  max_block_samples: 100
+  queue_blocks: 256
+rtd:
+  type: PT_3851
+  curve_note: 'NI standard curve selection; verify against TL4050 PT100 certificate
+    before enabling hardware. Quotation alpha: 0.003850.'
+  r0_ohm: 100.0
+  excitation_a: 0.001
+  adc_mode: HIGH_RESOLUTION
+  measurement_range_c:
+  - -20.0
+  - 100.0
+  channels:
+  - name: t_air_in_c
+    raw_name: t_air_in_raw_c
+    physical: cDAQ1Mod1/ai0
+    gain: 1.0
+    offset_c: 0.0
+    calibration_id: none_individual_probe_correction_not_applied
+  - name: t_air_out_c
+    raw_name: t_air_out_raw_c
+    physical: cDAQ1Mod1/ai1
+    gain: 1.0
+    offset_c: 0.0
+    calibration_id: none_individual_probe_correction_not_applied
+  - name: t_water_upper_c
+    raw_name: t_water_upper_raw_c
+    physical: cDAQ1Mod1/ai2
+    gain: 1.0
+    offset_c: 0.0
+    calibration_id: none_individual_probe_correction_not_applied
+  - name: t_water_bulk_c
+    raw_name: t_water_bulk_raw_c
+    physical: cDAQ1Mod1/ai3
+    gain: 1.0
+    offset_c: 0.0
+    calibration_id: none_individual_probe_correction_not_applied
+analog:
+  terminal_configuration: DIFFERENTIAL
+  channels:
+  - name: t_ambient_c
+    raw_name: v_changor_t_v
+    unit: degC
+    physical: cDAQ1Mod2/ai0
+    negative_input: ai8
+    daq_range_v:
+    - -10.0
+    - 10.0
+    source_note: Provisional dual independent active 4-20 mA Changor outputs; range
+      not established.
+    scale:
+      kind: current_loop
+      confirmed: true
+      engineering_range:
+      - -20.0
+      - 80.0
+      post_gain: 1.0
+      post_offset: 0.0
+      calibration_id: SYNTHETIC_EXAMPLE_ONLY
+      shunt_id: R1
+      shunt_ohm: 250.0
+      signal_range_ma:
+      - 4.0
+      - 20.0
+  - name: rh_ambient_pct
+    raw_name: v_changor_rh_v
+    unit: percent_RH
+    physical: cDAQ1Mod2/ai1
+    negative_input: ai9
+    daq_range_v:
+    - -10.0
+    - 10.0
+    source_note: Quotation says 0-99.9% RH; verify transmitter scaling endpoints.
+    scale:
+      kind: current_loop
+      confirmed: true
+      engineering_range:
+      - 0.0
+      - 100.0
+      post_gain: 1.0
+      post_offset: 0.0
+      calibration_id: SYNTHETIC_EXAMPLE_ONLY
+      shunt_id: R2
+      shunt_ohm: 250.0
+      signal_range_ma:
+      - 4.0
+      - 20.0
+  - name: p_atm_pa
+    raw_name: v_p_atm_v
+    unit: Pa
+    physical: cDAQ1Mod2/ai2
+    negative_input: ai10
+    daq_range_v:
+    - -10.0
+    - 10.0
+    source_note: Quoted available analog/RS485 variants; confirm actual 4-20 mA absolute-pressure
+      variant.
+    scale:
+      kind: current_loop
+      confirmed: true
+      engineering_range:
+      - 0.0
+      - 120000.0
+      post_gain: 1.0
+      post_offset: 0.0
+      calibration_id: SYNTHETIC_EXAMPLE_ONLY
+      shunt_id: R3
+      shunt_ohm: 250.0
+      signal_range_ma:
+      - 4.0
+      - 20.0
+  - name: p_water_in_pa
+    raw_name: v_p_water_in_v
+    unit: Pa
+    physical: cDAQ1Mod2/ai3
+    negative_input: ai11
+    daq_range_v:
+    - -10.0
+    - 10.0
+    source_note: Quoted 0-80 psi; 0.5-4.5 V or 0-5 V variant and pressure reference
+      unconfirmed.
+    scale:
+      kind: voltage_linear
+      confirmed: true
+      engineering_range:
+      - 0.0
+      - 551580.58345344
+      post_gain: 1.0
+      post_offset: 0.0
+      calibration_id: SYNTHETIC_EXAMPLE_ONLY
+      signal_range_v:
+      - 0.5
+      - 4.5
+  - name: p_water_out_pa
+    raw_name: v_p_water_out_v
+    unit: Pa
+    physical: cDAQ1Mod2/ai4
+    negative_input: ai12
+    daq_range_v:
+    - -10.0
+    - 10.0
+    source_note: Quoted 0-80 psi; 0.5-4.5 V or 0-5 V variant and pressure reference
+      unconfirmed.
+    scale:
+      kind: voltage_linear
+      confirmed: true
+      engineering_range:
+      - 0.0
+      - 551580.58345344
+      post_gain: 1.0
+      post_offset: 0.0
+      calibration_id: SYNTHETIC_EXAMPLE_ONLY
+      signal_range_v:
+      - 0.5
+      - 4.5
+  - name: dp_air_duct_pa
+    raw_name: v_dp_air_v
+    unit: Pa
+    physical: cDAQ1Mod2/ai5
+    negative_input: ai13
+    daq_range_v:
+    - -10.0
+    - 10.0
+    source_note: AliExpress range/order variant unconfirmed. Do not assume 0-3 kPa.
+    scale:
+      kind: current_loop
+      confirmed: true
+      engineering_range:
+      - 0.0
+      - 3000.0
+      post_gain: 1.0
+      post_offset: 0.0
+      calibration_id: SYNTHETIC_EXAMPLE_ONLY
+      shunt_id: R4
+      shunt_ohm: 250.0
+      signal_range_ma:
+      - 4.0
+      - 20.0
+  - name: v_air_m_s
+    raw_name: v_air_velocity_v
+    unit: m/s
+    physical: cDAQ1Mod2/ai6
+    negative_input: ai14
+    daq_range_v:
+    - -10.0
+    - 10.0
+    source_note: Air-velocity transmitter not yet identified/configured.
+    scale:
+      kind: current_loop
+      confirmed: true
+      engineering_range:
+      - 0.0
+      - 10.0
+      post_gain: 1.0
+      post_offset: 0.0
+      calibration_id: SYNTHETIC_EXAMPLE_ONLY
+      shunt_id: R5
+      shunt_ohm: 250.0
+      signal_range_ma:
+      - 4.0
+      - 20.0
+counter:
+  name: q_water_l_min
+  raw_name: water_pulse_count
+  frequency_name: f_water_hz
+  bits: 32
+  edge: RISING
+  hz_per_l_min: 0.5
+  calibration_confirmed: true
+  calibration_id: SYNTHETIC_EXAMPLE_ONLY
+  valid_flow_l_min:
+  - 5.0
+  - 150.0
+  nominal_source: 'DSC-742-R3 p2: F=0.5*Q; Q in L/min. Verify delivered sensor and
+    calibration.'
+storage:
+  tdms: false
+  min_free_mb: 500.0
+  commit_interval_s: 1.0
+external:
+  impeller_rpm: null
+  method: ''
+  uncertainty_rpm: null
+  source: external_calculation_not_cDAQ

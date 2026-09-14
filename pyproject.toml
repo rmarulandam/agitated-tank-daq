@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agitated-tank-daq"
+version = "0.1.0"
+description = "Text-based, acquisition-only instrumentation for an agitated-tank experiment"
+requires-python = ">=3.11"
+dependencies = ["numpy>=1.26,<3", "PyYAML>=6.0,<7"]
+
+[project.optional-dependencies]
+ni = ["nidaqmx>=1.4,<2"]
+parquet = ["pyarrow>=15,<30"]
+test = ["pytest>=8,<10"]
+
+[project.scripts]
+tankdaq = "tankdaq.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra"

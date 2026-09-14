@@ -1,0 +1,6 @@
+{
+  "source_run": "/mnt/data/tankdaq_integration/f909bb/sample/20260907T022122_746150Z_SIM_SIMULATION_1668ef",
+  "format": "csv",
+  "source_database_sha256": "fe7ee49f091cbe0386269b25923d9591901a5b3d09be551e61ff5fb90562a48b",
+  "notes": "Long-form samples; raw values, quality flags and independent stream times are preserved."
+}
