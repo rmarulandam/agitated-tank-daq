@@ -48,8 +48,9 @@ def main(argv: list[str] | None=None) -> int:
                 for ch in cfg["analog"]["channels"]:
                     if not ch["scale"]["confirmed"]:
                         print("Unconfirmed engineering scale:",ch["name"])
-                if not cfg["counter"]["calibration_confirmed"]:
-                    print("Unconfirmed flow calibration: q_water_l_min")
+                for ch in cfg["counter"]["channels"]:
+                    if not ch["calibration_confirmed"]:
+                        print("Unconfirmed flow calibration:", ch["name"])
                 return 0
             from .runner import run
             _,status=run(cfg,args.config,args.output,backend=args.backend,duration_s=args.duration,

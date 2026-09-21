@@ -25,7 +25,8 @@ def test_run_data_integrity(completed):
     info=inspect_run(completed)
     assert info['integrity']=='ok'
     assert len(info['channel_samples'])==11
-    assert info['counter_polls']>=1
+    assert len(info['counter_polls'])==2
+    assert all(c['n']>=1 for c in info['counter_polls'])
     for ch in info['channel_samples']:
         assert ch['first_index']==0
         assert ch['last_index']==ch['n']-1
@@ -41,6 +42,8 @@ def test_csv_export_preserves_raw_and_quality(completed):
     assert rows and all('SIMULATED' in x['quality'] for x in rows)
     assert all(x['raw_value'] for x in rows)
     assert all(x['simulated']=='1' for x in rows)
+    with (result/'counter.csv').open() as f:c_rows=list(csv.DictReader(f))
+    assert c_rows and set(x['channel'] for x in c_rows)=={'q_water_in_l_min','q_water_out_l_min'}
 
 def test_notes(completed):
     add_note(completed,'Independent RPM calculation recorded separately')

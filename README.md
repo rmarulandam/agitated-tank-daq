@@ -2,14 +2,15 @@
 
 A text-based, **acquisition-only** Python application for the agreed experimental rig:
 
-- cDAQ-9173 with NI-9217: four 4-wire PT100 temperatures.
-- NI-9204: seven differential voltage channels, including five 250-ohm shunts.
-- NI-9411: Hall water-flow pulses routed to a chassis counter.
-- Impeller RPM: an external calculation/record, **never a cDAQ channel**.
+- cDAQ-9173 with:
+  - NI-9217: four 4-wire PT100 temperatures.
+  - NI-9204: seven differential voltage channels.
+  - NI-9401: two Hall water-flow pulse trains (inlet & outlet) routed to chassis counters (5 V TTL).
 
-LabVIEW is not used. The NI backend uses NI's `nidaqmx` Python API and the separately installed NI-DAQmx driver. The simulator needs neither NI hardware nor the NI driver. This software does not command the fan, impeller, pump, valves or heater, and is not an emergency-stop system.
 
-**Release status:** application/simulator tested in the build environment; NI API calls checked against NI documentation and exercised with fake API contract tests. No physical NI chassis, sensors or Windows installation was available for hardware acceptance testing. The included `TEST_REPORT.md` states exactly what was tested. Commission the rig before collecting dissertation data.
+The NI backend uses NI's `nidaqmx` Python API and the separately installed NI-DAQmx driver. The simulator needs neither NI hardware nor the NI driver.
+
+**Release status:** The included `TEST_REPORT.md` states exactly what was tested. Commission the rig before collecting dissertation data.
 
 ## 1. First run on Windows: no hardware needed
 
@@ -43,13 +44,17 @@ Stopping the **watch** command does not stop acquisition. Press Ctrl+C in the **
 
 Optional convenience scripts are in `scripts/`. The commands above are sufficient; no script execution-policy changes are needed.
 
-## 2. Exactly what is implemented
+## 2. what is implemented
 
-Two continuous, hardware-clocked analog-input tasks run independently: a four-channel RTD task and a seven-channel voltage task. A third task starts a cumulative rising-edge counter once, then polls its count. Each producer has a bounded queue feeding one transactional database writer. The display reads the database and never owns the DAQ tasks.
+Two continuous, hardware-clocked analog-input tasks run independently: a four-channel RTD task and a seven-channel voltage task. A third worker task starts cumulative rising-edge counters once on two independent chassis counters, then polls their counts. Each producer has a bounded queue feeding one transactional database writer.
 
-Default requested acquisition settings are **1 sample/s/channel for RTDs**, **10 samples/s/channel for analog voltages**, and **2 counter polls/s**. RTD ADC mode is explicitly `HIGH_RESOLUTION`. NI-DAQmx verifies/commits the tasks and the application records the driver-returned sample rates. Unsupported configurations fail; the code does not silently change wiring, downgrade ADC mode, or fall back to fake measurements.
+Default requested acquisition settings are **1 sample/s/channel for RTDs**, **10 samples/s/channel for analog voltages**, and **2 counter polls/s**. RTD ADC mode is explicitly `HIGH_RESOLUTION`. NI-DAQmx verifies/commits the tasks and the application records the driver-returned sample rates. Unsupported configurations fail.
 
-The Hall sensor's quoted nominal equation is `f_Hz = 0.5 * Q_L_per_min`. The application estimates frequency from differences of cumulative hardware counts over an actual elapsed-time rolling window, then applies the configured coefficient. The default window is 10 seconds. For a 10-second window, one count corresponds to 0.2 L/min under the quoted coefficient. This number is counting resolution, **not total measurement uncertainty**. The beginning of a run is flagged `WARMUP` until the window is established.
+Two independent Hall-effect water flow channels are acquired:
+- **Inlet Flow (`q_water_in_l_min`)**: G1-1/2 sensor with nominal equation $f_{\text{Hz}} = 0.5 \cdot Q_{\text{in}}$ (L/min), range 5–150 L/min, routed to chassis counter `ctr0` on NI-9401 terminal `PFI0`.
+- **Outlet Flow (`q_water_out_l_min`)**: GREDIA GR-S403 G3/4" sensor with nominal equation $f_{\text{Hz}} = 5.5 \cdot Q_{\text{out}} \pm 2\%$ (L/min), range 1–60 L/min ($\le 1.2\text{ MPa}$), routed to chassis counter `ctr1` on NI-9401 terminal `PFI1`.
+
+The application estimates frequency for each sensor from differences of cumulative hardware counts over an actual elapsed-time rolling window, then applies the configured coefficient. The default window is 10 seconds. The beginning of a run is flagged `WARMUP` until the window is established.
 
 There is no pulse-period timeout at zero flow: cumulative count reads can return an unchanged count. An unchanged count is flagged `NO_PULSES_FLOW_OR_SIGNAL_LOSS`, because software cannot distinguish stopped water from a failed/disconnected signal. Poll timestamps and duration are saved. Frequency estimates are rolling averages, not instantaneous flow measurements.
 
@@ -72,11 +77,12 @@ Device names below are configuration defaults, not a claim about the names assig
 | Analog | `cDAQ1Mod2/ai4` | `AI12` | `v_p_water_out_v` | `p_water_out_pa` |
 | Analog | `cDAQ1Mod2/ai5` | `AI13` | `v_dp_air_v` | `dp_air_duct_pa` |
 | Analog | `cDAQ1Mod2/ai6` | `AI14` | `v_air_velocity_v` | `v_air_m_s` |
-| Counter | `cDAQ1Mod3/ctr0` | source `/cDAQ1Mod3/PFI0` | `water_pulse_count` | `f_water_hz`, `q_water_l_min` |
+| Counter | `cDAQ1Mod3/ctr0` | source `/cDAQ1Mod3/PFI0` | `water_in_pulse_count` | `f_water_in_hz`, `q_water_in_l_min` |
+| Counter | `cDAQ1Mod3/ctr1` | source `/cDAQ1Mod3/PFI1` | `water_out_pulse_count` | `f_water_out_hz`, `q_water_out_l_min` |
 
 The NI-9204 is explicitly configured as `DIFF`. Its negative inputs are not added as extra DAQ channels. `ai7/ai15` remains unused. R1, R2, R3, R4 and R5 are associated with Changor T, Changor RH, barometric pressure, air differential pressure, and air velocity respectively. R6-R10 are spares and have no software channels. The unused fourth chassis slot remains unused.
 
-The counter resource is selected explicitly; `tankdaq devices` lists the available counter names and PFI terminals. If your installation enumerates the counter under the chassis rather than the module, set `hardware.counter_channel` to the exact listed resource. Keep `pulse_terminal` pointed at the physical NI-9411 input. Resource existence is checked first; DAQmx task commit validates the route. The software never substitutes another input automatically.
+Counter resources are selected explicitly; `tankdaq devices` lists the available counter names and PFI terminals. If your installation enumerates counters under the chassis rather than the module (e.g. `cDAQ1/ctr0`), set each channel's `counter_channel` to the exact listed resource. Keep `pulse_terminal` pointed at the physical NI-9401 inputs (`/cDAQ1Mod3/PFI0` and `/cDAQ1Mod3/PFI1`). Resource existence is checked first; DAQmx task commit validates the route. The software never substitutes another input automatically.
 
 ## 4. Commission the real hardware
 
@@ -130,7 +136,7 @@ Y_corrected = Y * post_gain + post_offset
 
 A voltage-output channel uses the same interpolation with its confirmed voltage endpoints. No engineering values are clipped at the configured endpoints. Out-of-range signals receive quality flags. Raw values are always kept.
 
-Confirm the Hall coefficient, set `counter.calibration_confirmed: true`, and record its source in `counter.calibration_id`. Once all scales are confirmed, omit `--raw-only`:
+Confirm each Hall sensor's coefficient, set `calibration_confirmed: true` in its channel definition, and record its source in `calibration_id` (for example, the confirmed GREDIA GR-S403 outlet sensor coefficient $5.5\text{ Hz/(L/min)}$). Once all scales are confirmed, omit `--raw-only`:
 
 ```powershell
 .\.venv\Scripts\python.exe -m tankdaq run --config configs\rig.local.yaml --backend ni --acknowledge-wiring --duration 3600

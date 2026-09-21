@@ -48,7 +48,7 @@ def inventory() -> dict[str, Any]:
 def verify_inventory(cfg: dict[str, Any], info: dict[str, Any]) -> None:
     devices = {d["name"]:d for d in info["devices"]}
     hw = cfg["hardware"]
-    for key, model in (("chassis","9173"),("rtd_module","9217"),("analog_module","9204"),("counter_module","9411")):
+    for key, model in (("chassis","9173"),("rtd_module","9217"),("analog_module","9204"),("counter_module","9401")):
         name = hw[key]
         if name not in devices:
             raise RuntimeError(f"Required {key} {name} not found. Available: {list(devices)}")
@@ -63,11 +63,12 @@ def verify_inventory(cfg: dict[str, Any], info: dict[str, Any]) -> None:
             if ch["physical"] not in available:
                 raise RuntimeError(f"Physical channel missing: {ch['physical']}; available: {available}")
     counters = [ch for d in devices.values() for ch in d.get("ci_physical_chans",[])]
-    if hw["counter_channel"] not in counters:
-        raise RuntimeError(f"Counter {hw['counter_channel']} not enumerated. Set the exact available name: {counters}")
     terms = [t for d in devices.values() for t in d.get("terminals",[])]
-    if hw["pulse_terminal"] not in terms:
-        raise RuntimeError(f"Pulse terminal {hw['pulse_terminal']} not enumerated. Inspect 'tankdaq devices' PFI terminals")
+    for ch in cfg["counter"]["channels"]:
+        if ch["counter_channel"] not in counters:
+            raise RuntimeError(f"Counter {ch['counter_channel']} not enumerated. Set the exact available name: {counters}")
+        if ch["pulse_terminal"] not in terms:
+            raise RuntimeError(f"Pulse terminal {ch['pulse_terminal']} not enumerated. Inspect 'tankdaq devices' PFI terminals")
 
 class NIAnalog(Worker):
     def __init__(self, stream: str, cfg: dict[str, Any], folder: Path):
@@ -179,53 +180,67 @@ class NIAnalog(Worker):
         self.outcome.closed = True
 
 class NICounter(Worker):
-    def __init__(self,cfg: dict[str, Any]):
+    def __init__(self, cfg: dict[str, Any]):
         super().__init__("counter")
-        self.cfg, self.task = cfg, None
+        self.cfg = cfg
+        self.tasks: list[Any] = []
 
     def prepare(self) -> None:
-        nidaqmx,c,_,_ = api()
-        self.task = nidaqmx.Task(new_task_name=f"tankdaq_counter_{uuid.uuid4().hex[:8]}")
+        nidaqmx, c, _, _ = api()
+        edge = getattr(c.Edge, self.cfg["counter"]["edge"])
         try:
-            ch = self.task.ci_channels.add_ci_count_edges_chan(
-                self.cfg["hardware"]["counter_channel"],name_to_assign_to_channel="water_pulse_count",
-                edge=getattr(c.Edge,self.cfg["counter"]["edge"]),initial_count=0,
-                count_direction=c.CountDirection.COUNT_UP)
-            ch.ci_count_edges_term = self.cfg["hardware"]["pulse_terminal"]
-            self.task.in_stream.auto_start = False
-            self.task.control(c.TaskMode.TASK_COMMIT)
-            self.outcome.metadata.update(physical_counter=self.cfg["hardware"]["counter_channel"],
-                                         terminal=ch.ci_count_edges_term,
-                                         timing="hardware_cumulative_counts_host_poll_midpoints",
-                                         simulated=False,hardware_sample_clock=False)
+            for ch_cfg in self.cfg["counter"]["channels"]:
+                task = nidaqmx.Task(new_task_name=f"tankdaq_counter_{ch_cfg['name']}_{uuid.uuid4().hex[:6]}")
+                ch = task.ci_channels.add_ci_count_edges_chan(
+                    ch_cfg["counter_channel"], name_to_assign_to_channel=ch_cfg["raw_name"],
+                    edge=edge, initial_count=0, count_direction=c.CountDirection.COUNT_UP)
+                ch.ci_count_edges_term = ch_cfg["pulse_terminal"]
+                task.in_stream.auto_start = False
+                task.control(c.TaskMode.TASK_COMMIT)
+                self.tasks.append(task)
+            self.outcome.metadata.update(
+                channels=[c["name"] for c in self.cfg["counter"]["channels"]],
+                physical_counters=[c["counter_channel"] for c in self.cfg["counter"]["channels"]],
+                terminals=[c["pulse_terminal"] for c in self.cfg["counter"]["channels"]],
+                timing="hardware_cumulative_counts_host_poll_midpoints",
+                simulated=False, hardware_sample_clock=False)
         except Exception:
             self.close()
             raise
 
-    def produce(self,clock: Clock,out: queue.Queue,stop: threading.Event) -> None:
-        self.task.start()  # Start exactly once: successive reads are cumulative.
+    def produce(self, clock: Clock, out: queue.Queue, stop: threading.Event) -> None:
+        for task in self.tasks:
+            task.start()  # Start exactly once: successive reads are cumulative.
         self.outcome.started = True
         t0 = clock.elapsed()
         self.outcome.metadata["start_observed_s"] = t0
-        self.publish(out,StreamInfo("counter",dict(self.outcome.metadata)))
+        self.publish(out, StreamInfo("counter", dict(self.outcome.metadata)))
         index = 0
+        channels = self.cfg["counter"]["channels"]
         while not stop.is_set():
             before = clock.elapsed()
-            count = int(self.task.read(timeout=1.0))
+            counts = [int(task.read(timeout=1.0)) for task in self.tasks]
             after = clock.elapsed()
-            self.publish(out,CounterPoint(index,(before+after)/2,after-before,count,False))
+            midpoint = (before + after) / 2
+            duration = after - before
+            for ch_cfg, count in zip(channels, counts):
+                self.publish(out, CounterPoint(index, ch_cfg["name"], midpoint, duration, count, False))
             index += 1
             self.outcome.samples_per_channel = index
-            due = t0+index/self.cfg["sampling"]["counter_poll_hz"]
+            due = t0 + index / self.cfg["sampling"]["counter_poll_hz"]
             # Never invent fixed read times: the actual midpoint is logged.
-            if stop.wait(max(0,due-clock.elapsed())):
+            if stop.wait(max(0, due - clock.elapsed())):
                 break
-        self.task.stop()
+        for task in self.tasks:
+            task.stop()
 
     def close(self) -> None:
-        if self.task is not None:
-            task,self.task = self.task,None
-            task.close()
+        tasks, self.tasks = self.tasks, []
+        for task in tasks:
+            try:
+                task.close()
+            except Exception:
+                pass
         self.outcome.closed = True
 
 def hardware_workers(cfg: dict[str, Any], folder: Path) -> tuple[list[Worker], dict[str, Any]]:

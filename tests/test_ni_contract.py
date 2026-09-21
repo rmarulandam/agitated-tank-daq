@@ -77,23 +77,27 @@ def test_analog_contract(rig,tmp_path,fake_api):
     w.close()
 
 def test_counter_contract(rig,fake_api):
-    w=NICounter(rig);w.prepare();task=fake_api[-1]
-    args,ch=task.ci_channels.calls[0]
-    assert args['counter']=='cDAQ1Mod3/ctr0'
-    assert ch.ci_count_edges_term=='/cDAQ1Mod3/PFI0'
-    assert args['initial_count']==0 and args['count_direction']=='COUNT_UP'
-    assert task.in_stream.auto_start is False
+    w=NICounter(rig);w.prepare()
+    assert len(w.tasks)==2
+    args0,ch0=w.tasks[0].ci_channels.calls[0]
+    assert args0['counter']=='cDAQ1Mod3/ctr0' and ch0.ci_count_edges_term=='/cDAQ1Mod3/PFI0'
+    assert args0['initial_count']==0 and args0['count_direction']=='COUNT_UP'
+    assert w.tasks[0].in_stream.auto_start is False
+    args1,ch1=w.tasks[1].ci_channels.calls[0]
+    assert args1['counter']=='cDAQ1Mod3/ctr1' and ch1.ci_count_edges_term=='/cDAQ1Mod3/PFI1'
+    assert args1['initial_count']==0 and args1['count_direction']=='COUNT_UP'
+    assert w.tasks[1].in_stream.auto_start is False
     w.close()
 
 def make_inventory(rig):
     hw=rig['hardware'];devices=[]
-    for key,model in [('chassis','9173'),('rtd_module','9217'),('analog_module','9204'),('counter_module','9411')]:
+    for key,model in [('chassis','9173'),('rtd_module','9217'),('analog_module','9204'),('counter_module','9401')]:
         devices.append(dict(name=hw[key],product_type='NI '+model,is_simulated=False,
                             ai_physical_chans=[],ci_physical_chans=[],terminals=[]))
     devices[1]['ai_physical_chans']=[x['physical'] for x in rig['rtd']['channels']]
     devices[2]['ai_physical_chans']=[x['physical'] for x in rig['analog']['channels']]
-    devices[3]['ci_physical_chans']=[hw['counter_channel']]
-    devices[3]['terminals']=[hw['pulse_terminal']]
+    devices[3]['ci_physical_chans']=[c['counter_channel'] for c in rig['counter']['channels']]
+    devices[3]['terminals']=[c['pulse_terminal'] for c in rig['counter']['channels']]
     return {'devices':devices}
 
 def test_inventory_accepts_configured_resources(rig):verify_inventory(rig,make_inventory(rig))
@@ -103,7 +107,7 @@ def test_inventory_rejects_ni_max_simulation(rig):
     with pytest.raises(RuntimeError,match='simulated devices'):verify_inventory(rig,info)
 
 def test_inventory_rejects_wrong_counter_route(rig):
-    info=make_inventory(rig);info['devices'][3]['ci_physical_chans']=['cDAQ1/ctr0']
+    info=make_inventory(rig);info['devices'][3]['ci_physical_chans']=['cDAQ1Mod3/ctr0']
     with pytest.raises(RuntimeError,match='not enumerated'):verify_inventory(rig,info)
 
 def test_inventory_rejects_wrong_module(rig):
