@@ -40,7 +40,7 @@ def export_run(folder: Path, fmt: str, output: Path | None = None) -> Path:
             # Table names are from the constant allow-list, never user SQL.
             query = f"SELECT * FROM {name}"
             if name=="samples": query += " ORDER BY stream,sample_index,channel"
-            elif name=="counter": query += " ORDER BY poll_index"
+            elif name=="counter": query += " ORDER BY poll_index,channel"
             cursor = db.execute(query)
             columns = [x[0] for x in cursor.description]
             if fmt == "csv":
@@ -72,7 +72,8 @@ def inspect_run(folder: Path) -> dict[str, Any]:
                    "raw_only":info.get("raw_only"),"integrity":db.execute("PRAGMA quick_check").fetchone()[0]}
         summary["channel_samples"] = [dict(r) for r in db.execute(
             "SELECT stream,channel,count(*) AS n,min(sample_index) AS first_index,max(sample_index) AS last_index FROM samples GROUP BY stream,channel")]
-        summary["counter_polls"] = db.execute("SELECT count(*) FROM counter").fetchone()[0]
+        summary["counter_polls"] = [dict(r) for r in db.execute(
+            "SELECT channel,count(*) AS n,min(poll_index) AS first_index,max(poll_index) AS last_index FROM counter GROUP BY channel")]
         summary["faults"] = info.get("faults",[])
         return summary
     finally:
@@ -83,7 +84,7 @@ def watch(folder: Path,interval: float=2.0,once: bool=False) -> None:
         raise ValueError("Monitor interval must be positive")
     db=connect_readonly(folder)
     try:
-        names = [r[0] for r in db.execute("SELECT name FROM channels ORDER BY stream,name")]
+        names = [r[0] for r in db.execute("SELECT name FROM channels WHERE stream!='counter' ORDER BY stream,name")]
         while True:
             print("\n"+time.strftime("%H:%M:%S")+" | "+folder.name)
             # A display-only connection, deliberately independent of DAQ task ownership.
@@ -93,9 +94,11 @@ def watch(folder: Path,interval: float=2.0,once: bool=False) -> None:
                     value = "unscaled" if row["value"] is None else f"{row['value']:.5g} {row['unit']}"
                     raw = "null" if row["raw_value"] is None else f"{row['raw_value']:.5g}"
                     print(f"{name:22} {value:20} raw={raw:10} {row['raw_unit']:5} {row['quality']}")
-            flow=db.execute("SELECT * FROM counter ORDER BY poll_index DESC LIMIT 1").fetchone()
-            if flow:
-                print("water pulses:",flow["count_raw"],"frequency:",flow["frequency_hz"],"flow L/min:",flow["flow_l_min"],flow["quality"])
+            flows=db.execute("SELECT channel,count_raw,frequency_hz,flow_l_min,quality FROM counter WHERE poll_index=(SELECT MAX(poll_index) FROM counter) ORDER BY channel").fetchall()
+            for flow in flows:
+                q_val = "unscaled" if flow["flow_l_min"] is None else f"{flow['flow_l_min']:.4g} L/min"
+                f_val = "null" if flow["frequency_hz"] is None else f"{flow['frequency_hz']:.4g} Hz"
+                print(f"{flow['channel']:22} {q_val:20} raw={flow['count_raw']:<10} freq={f_val:<12} {flow['quality']}")
             if once: break
             time.sleep(interval)
     except KeyboardInterrupt:

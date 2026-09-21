@@ -122,3 +122,11 @@ def test_rolling_window_bounded():
     for i in range(1000):r=update(f,float(i),i*15)
     assert len(f.history)<=12
     assert r['flow_l_min']==30.
+
+def test_gredia_flow_frequency_and_resolution():
+    f=FlowWindow(10.,5.5)
+    f.update(0.,0,scale_confirmed=True,raw_only=False,valid_range=[1.,60.])
+    r=f.update(10.,1650,scale_confirmed=True,raw_only=False,valid_range=[1.,60.])
+    assert r['frequency_hz']==165.
+    assert r['flow_l_min']==pytest.approx(30.)
+    assert r['one_count_resolution_l_min']==pytest.approx(1.0/(10.0*5.5))

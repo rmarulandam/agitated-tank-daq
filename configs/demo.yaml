@@ -11,8 +11,6 @@ hardware:
   rtd_module: cDAQ1Mod1
   analog_module: cDAQ1Mod2
   counter_module: cDAQ1Mod3
-  counter_channel: cDAQ1Mod3/ctr0
-  pulse_terminal: /cDAQ1Mod3/PFI0
 checks:
   wiring_verified: false
   sensor_supplies_verified: false
@@ -227,19 +225,33 @@ analog:
       - 4.0
       - 20.0
 counter:
-  name: q_water_l_min
-  raw_name: water_pulse_count
-  frequency_name: f_water_hz
   bits: 32
   edge: RISING
-  hz_per_l_min: 0.5
-  calibration_confirmed: true
-  calibration_id: SYNTHETIC_EXAMPLE_ONLY
-  valid_flow_l_min:
-  - 5.0
-  - 150.0
-  nominal_source: 'DSC-742-R3 p2: F=0.5*Q; Q in L/min. Verify delivered sensor and
-    calibration.'
+  channels:
+  - name: q_water_in_l_min
+    raw_name: water_in_pulse_count
+    frequency_name: f_water_in_hz
+    counter_channel: cDAQ1Mod3/ctr0
+    pulse_terminal: /cDAQ1Mod3/PFI0
+    hz_per_l_min: 0.5
+    calibration_confirmed: true
+    calibration_id: SYNTHETIC_EXAMPLE_ONLY
+    valid_flow_l_min:
+    - 5.0
+    - 150.0
+    nominal_source: 'Synthetic demonstration only.'
+  - name: q_water_out_l_min
+    raw_name: water_out_pulse_count
+    frequency_name: f_water_out_hz
+    counter_channel: cDAQ1Mod3/ctr1
+    pulse_terminal: /cDAQ1Mod3/PFI1
+    hz_per_l_min: 5.5
+    calibration_confirmed: true
+    calibration_id: SYNTHETIC_EXAMPLE_ONLY
+    valid_flow_l_min:
+    - 1.0
+    - 60.0
+    nominal_source: 'Synthetic demonstration only.'
 storage:
   tdms: false
   min_free_mb: 500.0

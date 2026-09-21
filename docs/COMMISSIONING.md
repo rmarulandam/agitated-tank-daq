@@ -4,7 +4,7 @@ This is an acquisition-software checklist, not a replacement electrical installa
 
 ## Before acquisition
 
-Keep motors and other actuators independently disabled during signal checkout. Verify the actual modules are NI-9217, NI-9204 and the added NI-9411 in a cDAQ-9173. Confirm that the NI-9411 is actually installed: it was an addition to the original two-module quotation. Install supported NI-DAQmx drivers and confirm device names/resources with NI MAX and `tankdaq devices`. Close test panels before running the application.
+Keep motors and other actuators independently disabled during signal checkout. Verify the actual modules are NI-9217, NI-9204 and the added NI-9401 in a cDAQ-9173. Confirm that the NI-9401 is actually installed: it was an addition to the original two-module quotation. Install supported NI-DAQmx drivers and confirm device names/resources with NI MAX and `tankdaq devices`. Close test panels before running the application.
 
 Check the four sensor-side RTD lead pairs and the installed standard curve. The template selects NI PT_3851, four wires, 100 ohms and 1 mA internal excitation. The quotation gives a rounded alpha; use the delivered sensor documentation/certificate to settle the curve. Do not apply 24 V to RTD terminals. The `rtd_curve_verified` check is a physical/documentary acknowledgement, not a software identification procedure.
 
@@ -14,7 +14,14 @@ The Changor dual-loop wiring remains provisional until confirmed on the actual u
 
 Confirm differential-air-pressure range, sign and pressure-port assignment. Confirm the selected airflow transmitter's actual model, configured velocity range and output, and the representativeness of its duct installation. The software deliberately does not pick an AliExpress range or claim that an unspecified sensor measures mean cross-sectional velocity.
 
-For the Hall sensor, confirm output topology, logic level, pull-up requirements and NI-9411 single-ended/differential wiring from the actual manuals. The flow-task code routes the configured PFI input to a counter; it does not configure a missing external pull-up. Confirm `devices.json` enumerates the counter resource and PFI terminal you intend to use.
+For both Hall flow sensors, confirm output topology, logic levels, pull-up requirements and NI-9401 5 V TTL wiring from the actual manuals:
+- **Inlet Sensor (G1-1/2, nominal F = 0.5 * Q)**: Connected to NI-9401 DIO0 / PFI0 (`/cDAQ1Mod3/PFI0`) and driving chassis counter `ctr0`.
+- **Outlet Sensor (GREDIA GR-S403 G3/4", nominal F = 5.5 * Q ± 2%, range 1–60 L/min, <= 1.2 MPa)**: Connected to NI-9401 DIO1 / PFI1 (`/cDAQ1Mod3/PFI1`) and driving chassis counter `ctr1`. Wiring: Red wire = VCC (+5 V DC), Black wire = GND (-), Yellow wire = Signal output.
+
+> [!CAUTION]
+> **5 V TTL Logic Limit**: The NI-9401 accepts strictly 5 V TTL/CMOS logic levels (maximum 5.25 V). Power the Hall sensors from a clean +5 V DC supply (or condition the output with a level divider/shifter if powered from higher voltages). Connecting 12 V or 24 V pulses directly to the NI-9401 will cause permanent hardware damage.
+
+The flow-task code routes the configured PFI inputs to chassis counters; it does not configure a missing external pull-up. Confirm `devices.json` enumerates both counter resources (`ctr0`, `ctr1`) and PFI terminals (`PFI0`, `PFI1`) you intend to use.
 
 ## Signal injection and quiet tests
 
@@ -22,13 +29,13 @@ With field equipment appropriately disconnected, use a suitable calibrator and r
 
 For RTDs, use a suitable resistance standard or known-temperature comparison appropriate for four-wire measurements. Verify channel labels and physical locations before relying on inlet/outlet differences. Check expected ambient readings without treating agreement between sensors as a traceable calibration.
 
-Use a compatible pulse source, safely conditioned for the NI-9411, to check increasing counts and the configured coefficient. Check a stopped pulse train: frequency must eventually become zero after the rolling window clears, with a no-pulse ambiguity flag. Check pulse rates over the intended operating range. Confirm count polling remains responsive when no pulses arrive.
+Use a compatible pulse source, safely conditioned for the NI-9401 (5 V TTL), to check increasing counts and the configured coefficients on both channels (0.5 Hz/(L/min) on inlet, 5.5 Hz/(L/min) on outlet). Check a stopped pulse train: frequency must eventually become zero after the rolling window clears, with a no-pulse ambiguity flag. Check pulse rates over the intended operating range. Confirm count polling remains responsive when no pulses arrive.
 
-Only after the physical checks are complete should the four `checks` fields be marked true. Start with `--raw-only` for at least 60 seconds. Inspect all eleven analog/RTD channel records plus the counter. The seven transmitter engineering values and water-flow engineering value should remain null in raw-only mode; DAQmx RTD temperatures and raw voltages/counts remain available.
+Only after the physical checks are complete should the four `checks` fields be marked true. Start with `--raw-only` for at least 60 seconds. Inspect all eleven analog/RTD channel records plus both counter channels. The seven transmitter engineering values and two water-flow engineering values should remain null in raw-only mode; DAQmx RTD temperatures and raw voltages/counts remain available.
 
 ## Scale establishment
 
-Fill exact engineering endpoints and voltage/current endpoints from delivered sensors and calibration. Set `confirmed` only after the intended transfer function has been established; record its source under `calibration_id`. For current loops, enter actual shunt resistance. For water pressure, settle both voltage endpoints and pressure reference. Use Pa consistently for pressure outputs. Confirm the Hall Hz-per-(L/min) coefficient rather than silently relying on the quotation for a different model.
+Fill exact engineering endpoints and voltage/current endpoints from delivered sensors and calibration. Set `confirmed` only after the intended transfer function has been established; record its source under `calibration_id`. For current loops, enter actual shunt resistance. For water pressure, settle both voltage endpoints and pressure reference. Use Pa consistently for pressure outputs. Confirm each Hall sensor's Hz-per-(L/min) coefficient (e.g. 5.5 for the GREDIA GR-S403) rather than silently relying on unverified estimates.
 
 Individual RTD correction is `gain * DAQmx_temperature + offset_c`. Default gain 1/offset 0 means no individual correction, not proof of calibrated probes. The software does not estimate coefficients or uncertainty from calibration data.
 

@@ -85,18 +85,23 @@ class SimCounter(Worker):
     def produce(self, clock: Clock, out: queue.Queue, stop: threading.Event) -> None:
         self.outcome.started = True
         t0 = clock.elapsed()
-        self.outcome.metadata = dict(simulated=True, nominal_simulated_frequency_hz=15.0,
+        channels = self.cfg["counter"]["channels"]
+        self.outcome.metadata = dict(simulated=True,
+                                     channels=[c["name"] for c in channels],
                                      timing="host_poll_midpoint", t0_est_s=t0)
         self.publish(out, StreamInfo("counter", self.outcome.metadata))
         index = 0
         while not stop.is_set():
             t = clock.elapsed()
-            count = int(max(0.,t-t0)*15.0) % (1<<32)
-            self.publish(out, CounterPoint(index,t,0.,count,True))
+            for ch in channels:
+                sim_flow_l_min = 30.0
+                freq = ch["hz_per_l_min"] * sim_flow_l_min
+                count = int(max(0., t - t0) * freq) % (1 << 32)
+                self.publish(out, CounterPoint(index, ch["name"], t, 0., count, True))
             index += 1
             self.outcome.samples_per_channel = index
-            due = t0+index/self.cfg["sampling"]["counter_poll_hz"]
-            if stop.wait(max(0,due-clock.elapsed())):
+            due = t0 + index / self.cfg["sampling"]["counter_poll_hz"]
+            if stop.wait(max(0, due - clock.elapsed())):
                 break
 
 def simulation_workers(cfg: dict[str, Any]) -> list[Worker]:
