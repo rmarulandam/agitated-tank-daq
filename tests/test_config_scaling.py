@@ -122,3 +122,48 @@ def test_rolling_window_bounded():
     for i in range(1000):r=update(f,float(i),i*15)
     assert len(f.history)<=12
     assert r['flow_l_min']==30.
+
+
+def test_custom_channel_names_accepted(demo):
+    custom_rtd = ["t_inlet_c", "t_outlet_c", "t_top_c", "t_bottom_c"]
+    for i, name in enumerate(custom_rtd):
+        demo["rtd"]["channels"][i]["name"] = name
+        demo["rtd"]["channels"][i]["raw_name"] = name + "_raw_c"
+    custom_analog = ["t_amb_c", "humidity_pct", "p_baro_pa", "p_in_pa", "p_out_pa", "dp_duct_pa", "air_vel_m_s"]
+    for i, name in enumerate(custom_analog):
+        demo["analog"]["channels"][i]["name"] = name
+        demo["analog"]["channels"][i]["raw_name"] = "v_" + name
+    validate(demo)
+
+def test_rtd_count_must_be_four(demo):
+    demo["rtd"]["channels"] = demo["rtd"]["channels"][:3]
+    with pytest.raises(ConfigError, match="Four RTD channels are required"):
+        validate(demo)
+
+def test_analog_count_must_be_seven(demo):
+    demo["analog"]["channels"] = demo["analog"]["channels"][:6]
+    with pytest.raises(ConfigError, match="Seven analog channels are required"):
+        validate(demo)
+
+def test_invalid_channel_name_format(demo):
+    demo["rtd"]["channels"][0]["name"] = "123_invalid"
+    with pytest.raises(ConfigError, match=r"rtd\[0\]\.name"):
+        validate(demo)
+
+def test_invalid_raw_name_format(demo):
+    demo["analog"]["channels"][0]["raw_name"] = "invalid-name!"
+    with pytest.raises(ConfigError, match="raw_name"):
+        validate(demo)
+
+def test_rtd_raw_name_must_end_in_raw_c(demo):
+    demo["rtd"]["channels"][0]["raw_name"] = "t_inlet_raw_k"
+    with pytest.raises(ConfigError, match="must end in _raw_c"):
+        validate(demo)
+
+def test_duplicate_channel_name_rejected(demo):
+    demo["rtd"]["channels"][0]["name"] = "duplicate_name"
+    demo["rtd"]["channels"][1]["name"] = "duplicate_name"
+    demo["rtd"]["channels"][0]["raw_name"] = "duplicate_name_raw_c"
+    demo["rtd"]["channels"][1]["raw_name"] = "duplicate_name_2_raw_c"
+    with pytest.raises(ConfigError, match="unique"):
+        validate(demo)

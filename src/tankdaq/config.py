@@ -13,9 +13,11 @@ class ConfigError(ValueError):
 # Fail closed on misspelled top-level sections. Each signal's identity is fixed.
 ROOT_KEYS = {"schema_version", "simulation_only", "run", "hardware", "checks",
              "sampling", "rtd", "analog", "counter", "storage", "external"}
-RTD_NAMES = ("t_air_in_c", "t_air_out_c", "t_water_upper_c", "t_water_bulk_c")
-ANALOG_NAMES = ("t_ambient_c", "rh_ambient_pct", "p_atm_pa", "p_water_in_pa",
+DEFAULT_RTD_NAMES = ("t_air_in_c", "t_air_out_c", "t_water_upper_c", "t_water_bulk_c")
+RTD_NAMES = DEFAULT_RTD_NAMES
+DEFAULT_ANALOG_NAMES = ("t_ambient_c", "rh_ambient_pct", "p_atm_pa", "p_water_in_pa",
                 "p_water_out_pa", "dp_air_duct_pa", "v_air_m_s")
+ANALOG_NAMES = DEFAULT_ANALOG_NAMES
 CHECK_NAMES = ("wiring_verified", "sensor_supplies_verified", "rtd_curve_verified",
                "hall_logic_verified")
 
@@ -87,18 +89,32 @@ def validate(cfg: dict[str, Any], *, backend: str = "sim", raw_only: bool = Fals
         analog = cfg["analog"]["channels"]
         if cfg["analog"]["terminal_configuration"] != "DIFFERENTIAL":
             raise ConfigError("This design requires DIFFERENTIAL analog inputs")
-        if len(rtd) != 4 or tuple(c["name"] for c in rtd) != RTD_NAMES:
-            raise ConfigError(f"Four RTD channels in this order are required: {RTD_NAMES}")
-        if len(analog) != 7 or tuple(c["name"] for c in analog) != ANALOG_NAMES:
-            raise ConfigError(f"Seven analog channels in this order are required: {ANALOG_NAMES}")
+        if len(rtd) != 4:
+            raise ConfigError(f"Four RTD channels are required, got {len(rtd)}")
+        if len(analog) != 7:
+            raise ConfigError(f"Seven analog channels are required, got {len(analog)}")
         for i, ch in enumerate(rtd):
+            name = ch.get("name")
+            if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,49}", name):
+                raise ConfigError(f"rtd[{i}].name: use 1-50 ASCII letters, digits or '_', starting with a letter")
+            raw_name = ch.get("raw_name")
+            if not isinstance(raw_name, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,49}", raw_name):
+                raise ConfigError(f"{name}.raw_name: use 1-50 ASCII letters, digits or '_', starting with a letter")
+            if not raw_name.endswith("_raw_c"):
+                raise ConfigError(f"{name}.raw_name must end in _raw_c")
             if ch["physical"] != f"{hw['rtd_module']}/ai{i}":
                 raise ConfigError("RTD physical channels must be ai0 through ai3 on rtd_module")
             for key in ("gain", "offset_c"):
                 number(ch[key], f"{ch['name']}.{key}")
-            if not ch["raw_name"].endswith("_raw_c"):
-                raise ConfigError("RTD raw names must end in _raw_c")
+
+
         for i, ch in enumerate(analog):
+            name = ch.get("name")
+            if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,49}", name):
+                raise ConfigError(f"analog[{i}].name: use 1-50 ASCII letters, digits or '_', starting with a letter")
+            raw_name = ch.get("raw_name")
+            if not isinstance(raw_name, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,49}", raw_name):
+                raise ConfigError(f"{name}.raw_name: use 1-50 ASCII letters, digits or '_', starting with a letter")
             if ch["physical"] != f"{hw['analog_module']}/ai{i}" or ch["negative_input"] != f"ai{i+8}":
                 raise ConfigError("NI-9204 differential pairs must be ai0/ai8 through ai6/ai14")
             lo, hi = pair(ch["daq_range_v"], f"{ch['name']}.daq_range_v")

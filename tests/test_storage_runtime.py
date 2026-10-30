@@ -111,3 +111,28 @@ def test_optional_parquet_export(completed):
     output=export_run(completed,'parquet')
     tab=pq.read_table(output/'samples.parquet')
     assert tab.num_rows>0 and 'raw_value' in tab.column_names
+
+
+def test_run_with_custom_channel_names(tmp_path, demo):
+    import yaml
+    demo["rtd"]["channels"][0]["name"] = "t_custom_top_c"
+    demo["rtd"]["channels"][0]["raw_name"] = "t_custom_top_raw_c"
+    demo["analog"]["channels"][0]["name"] = "p_custom_baro_pa"
+    demo["analog"]["channels"][0]["raw_name"] = "v_custom_baro_v"
+    demo["sampling"]["rtd_hz"] = 5.0
+    cfg_path = tmp_path / "custom_demo.yaml"
+    cfg_path.write_text(yaml.safe_dump(demo), encoding="utf-8")
+    folder, status = run(demo, cfg_path, tmp_path / "runs", backend="sim", duration_s=0.5,
+                         raw_only=False, acknowledge_wiring=False, quiet=True)
+    assert status == "completed"
+    info = inspect_run(folder)
+    assert info["integrity"] == "ok"
+    channels_found = {ch["channel"] for ch in info["channel_samples"]}
+    assert "t_custom_top_c" in channels_found
+    assert "p_custom_baro_pa" in channels_found
+    export_dir = export_run(folder, "csv")
+    with (export_dir / "samples.csv").open(encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    exported_channels = {r["channel"] for r in rows}
+    assert "t_custom_top_c" in exported_channels
+    assert "p_custom_baro_pa" in exported_channels

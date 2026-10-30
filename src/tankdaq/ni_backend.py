@@ -48,13 +48,13 @@ def inventory() -> dict[str, Any]:
 def verify_inventory(cfg: dict[str, Any], info: dict[str, Any]) -> None:
     devices = {d["name"]:d for d in info["devices"]}
     hw = cfg["hardware"]
-    for key, model in (("chassis","9173"),("rtd_module","9217"),("analog_module","9204"),("counter_module","9411")):
+    for key, models in (("chassis",("9173",)),("rtd_module",("9217",)),("analog_module",("9204",)),("counter_module",("9411","9401"))):
         name = hw[key]
         if name not in devices:
             raise RuntimeError(f"Required {key} {name} not found. Available: {list(devices)}")
         d = devices[name]
-        if model not in str(d.get("product_type","")):
-            raise RuntimeError(f"{name}: expected model {model}, found {d.get('product_type')}")
+        if not any(m in str(d.get("product_type","")) for m in models):
+            raise RuntimeError(f"{name}: expected model in {models}, found {d.get('product_type')}")
         if d.get("is_simulated") is not False:
             raise RuntimeError(f"{name}: physical hardware status not verified; NI-MAX simulated devices are refused")
     for stream, key in (("rtd","rtd_module"),("analog","analog_module")):

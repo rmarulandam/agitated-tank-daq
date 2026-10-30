@@ -6,3 +6,5 @@ __pycache__/
 runs/
 build/
 dist/
+*.local.yaml
+devices.json
