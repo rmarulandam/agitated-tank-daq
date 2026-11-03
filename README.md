@@ -2,18 +2,17 @@
 
 A text-based, **acquisition-only** Python application for the agreed experimental rig:
 
-- cDAQ-9173 with NI-9217: four 4-wire PT100 temperatures.
-- NI-9204: seven differential voltage channels, including five 250-ohm shunts.
-- NI-9411: Hall water-flow pulses routed to a chassis counter.
-- Impeller RPM: an external calculation/record, **never a cDAQ channel**.
+- cDAQ-9173 with NI-9217: four 4-wire PT100 water temperatures (`t_water_in_c`, `t_water_out_c`, `t_water_level_quarter_c`, `t_water_level_three_quarters_c`).
+- NI-9204: seven differential voltage channels, including five 250-ohm shunts (`t_air_in_c`, `t_air_out_c`, `p_atm_pa`, `rh_ambient_pct`, `dp_air_duct_pa`) and two 0–10 V linear channels (`level_water_m`, `power_motor_w`).
+- NI-9411 or NI-9401: three pulse-counter channels (`water_flow_in`, `water_flow_out`, `impeller_rpm`) routed to chassis counters (`ctr0`, `ctr1`, `ctr2`).
 
-LabVIEW is not used. The NI backend uses NI's `nidaqmx` Python API and the separately installed NI-DAQmx driver. The simulator needs neither NI hardware nor the NI driver. This software does not command the fan, impeller, pump, valves or heater, and is not an emergency-stop system.
+The NI backend uses NI's `nidaqmx` Python API and the separately installed NI-DAQmx driver. The simulator needs neither NI hardware nor the NI driver.
 
-**Release status:** application/simulator tested in the build environment; NI API calls checked against NI documentation and exercised with fake API contract tests. No physical NI chassis, sensors or Windows installation was available for hardware acceptance testing. The included `TEST_REPORT.md` states exactly what was tested. Commission the rig before collecting dissertation data.
+**Release status:** application/simulator tested in the build environment; NI API calls checked against NI documentation and exercised with fake API contract tests. No physical NI chassis, sensors or Windows installation was available for hardware acceptance testing. The included `TEST_REPORT.md` states exactly what was tested. Commission the rig following [`docs/COMMISSIONING.md`](docs/COMMISSIONING.md) before collecting dissertation data.
 
-## 1. First run on Windows: no hardware needed
+## 1. First run on Windows: synthetic data
 
-Install 64-bit Python 3.12, extract the ZIP, and open PowerShell in the `agitated-tank-daq` folder. Python 3.11+ is accepted by the package. The following commands do not require activating the virtual environment or changing PowerShell's execution policy:
+Install 64-bit Python (Python 3.11–3.13 are supported; Python 3.12 or 3.13 recommended), extract the package, and open PowerShell in the `agitated-tank-daq` folder:
 
 ```powershell
 py -3.12 -m venv .venv
@@ -22,7 +21,7 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m tankdaq run --config configs\demo.yaml --backend sim --duration 60
 ```
 
-Dependencies are downloaded from the Python package index when installing; they are not bundled. The simulation is wall-clock paced. Its temperatures, voltages and pulse train are synthetic, not a calibrated tank model. `demo.yaml` has `simulation_only: true`; the hardware backend refuses to use it.
+Dependencies are downloaded from the Python package index when installing; they are not bundled. The simulation is wall-clock paced. Its temperatures, voltages and pulse trains are synthetic. `demo.yaml` has `simulation_only: true`; the hardware backend refuses to use it.
 
 After the run:
 
@@ -43,100 +42,78 @@ Stopping the **watch** command does not stop acquisition. Press Ctrl+C in the **
 
 Optional convenience scripts are in `scripts/`. The commands above are sufficient; no script execution-policy changes are needed.
 
-## 2. Exactly what is implemented
+## 2. What is implemented
 
-Two continuous, hardware-clocked analog-input tasks run independently: a four-channel RTD task and a seven-channel voltage task. A third task starts a cumulative rising-edge counter once, then polls its count. Each producer has a bounded queue feeding one transactional database writer. The display reads the database and never owns the DAQ tasks.
+The application coordinates two fundamentally different acquisition modes—continuous hardware-clocked analog sampling and on-demand digital counter polling—into a unified, crash-resilient data stream.
 
-Default requested acquisition settings are **1 sample/s/channel for RTDs**, **10 samples/s/channel for analog voltages**, and **2 counter polls/s**. RTD ADC mode is explicitly `HIGH_RESOLUTION`. NI-DAQmx verifies/commits the tasks and the application records the driver-returned sample rates. Unsupported configurations fail; the code does not silently change wiring, downgrade ADC mode, or fall back to fake measurements.
+### Architecture & Concurrency Pipeline
 
-The Hall sensor's quoted nominal equation is `f_Hz = 0.5 * Q_L_per_min`. The application estimates frequency from differences of cumulative hardware counts over an actual elapsed-time rolling window, then applies the configured coefficient. The default window is 10 seconds. For a 10-second window, one count corresponds to 0.2 L/min under the quoted coefficient. This number is counting resolution, **not total measurement uncertainty**. The beginning of a run is flagged `WARMUP` until the window is established.
+Acquisition, storage, and visualization run on separate threads to prevent disk latency or UI interactions from stalling hardware reads:
 
-There is no pulse-period timeout at zero flow: cumulative count reads can return an unchanged count. An unchanged count is flagged `NO_PULSES_FLOW_OR_SIGNAL_LOSS`, because software cannot distinguish stopped water from a failed/disconnected signal. Poll timestamps and duration are saved. Frequency estimates are rolling averages, not instantaneous flow measurements.
+- **Independent Acquisition Workers:**
+  - **Analog Tasks:** Two continuous, hardware-clocked analog input tasks run independently: a 4-channel RTD task (NI-9217) and a 7-channel differential voltage task (NI-9204).
+  - **Counter Tasks:** A third worker starts cumulative rising-edge counting once across three chassis counters (NI-9411 or NI-9401) for inlet water flow, outlet water flow, and axis impeller revolutions, polling count snapshots at regular intervals.
+- **Transactional Bounded Pipeline:** Producers push sample blocks into a shared, memory-bounded queue. A dedicated writer thread consumes this queue and commits records to an SQLite database in Write-Ahead Logging (WAL) mode. This isolates acquisition from disk latency; if disk writes fall behind, the bounded queue triggers an immediate, clean failure rather than silently discarding samples.
+- **Decoupled Terminal Monitor:** The live terminal monitor (`tankdaq watch`) queries `measurements.sqlite` in read-only mode (`?mode=ro`). Because the display never owns or communicates directly with the DAQ tasks, viewing, pausing, resizing, or closing the monitor cannot interrupt ongoing acquisition or drop hardware samples.
 
-The application handles 32-bit count rollover between polls. External counter resets during a run are not supported. Counts, elapsed windows and nominal/calibrated flow are retained separately.
+### Analog Sampling & Hardware Verification
 
-## 3. Channel map
+- **Configured Sampling Rates:** Default requested acquisition settings are **1 sample/s/channel for RTDs** (well-suited for slow thermal mass) and **10 samples/s/channel for analog voltages** (capturing air, pressure, level, and power dynamics).
+- **High-Resolution Thermal Filtering:** The RTD ADC timing mode is explicitly configured to `HIGH_RESOLUTION`, utilizing the NI-9217 delta-sigma converter's built-in 50/60 Hz power-line noise rejection.
+- **Fail-Closed Hardware Verification:** NI-DAQmx verifies and commits task configurations before acquisition starts. The application records the exact driver-returned clock rates in run metadata rather than assuming requested rates were accepted verbatim. Unsupported configurations fail immediately; the software will never silently alter wiring polarity, downgrade ADC modes, or substitute fake measurements.
 
-Device names below are configuration defaults, not a claim about the names assigned by NI MAX on your PC.
+### Pulse Counting & Rolling Window (Flow & Impeller RPM)
 
-| Stream | NI channel | Negative terminal signal | Raw data name | Engineering name |
+Water flow rates (`water_flow_in`, `water_flow_out`) and axis impeller speed (`impeller_rpm`) are measured by tracking cumulative rising edges rather than sampling raw waveforms:
+
+- **Rolling-Window Frequency Estimation:** Frequency ($f_{\text{Hz}}$) is estimated for each counter channel from differences in cumulative hardware counts over an actual elapsed-time rolling window (default: 10 seconds). Engineering rate ($Y$) is then calculated using each channel's configured calibration coefficient ($f_{\text{Hz}} = \text{hz\_per\_unit} \cdot Y$).
+- **Warmup & Resolution:** The beginning of a run is flagged `WARMUP` until the full 10-second rolling window is established. Under the nominal Hall flowmeter coefficient ($\text{hz\_per\_unit} = 0.5\,\text{Hz}/(\text{L/min})$), one count over 10 seconds corresponds to $0.2\,\text{L/min}$ counting resolution (**this is digital resolution, not total measurement uncertainty**).
+- **Signal Loss vs. Zero Rate Ambiguity:** Cumulative counter reads do not time out at zero flow or zero speed; they return an unchanged count. Because software cannot distinguish stagnant water or a stopped shaft from a broken wire or sensor failure, unchanged counts are explicitly flagged `NO_PULSES_FLOW_OR_SIGNAL_LOSS`.
+- **Rollover & Monotonicity:** The application automatically handles 32-bit integer count rollover between successive polls. Polling timestamps are recorded as host call midpoints, and counts, elapsed windows, and engineering rates are preserved independently.
+
+## 3. Hardware topology and channel mapping
+
+The software enforces the **physical module and terminal topology**, while channel identifiers (`name`, `unit`, and scaling) are **fully user-configurable in YAML**:
+
+- **Slot 1: NI-9217 (4-wire RTD)**: Exactly 4 channels on physical inputs `ai0` through `ai3`.
+  - Raw values: Linearized degrees Celsius from DAQmx.
+- **Slot 2: NI-9204 (Differential Voltage / Current Loops)**: Exactly 7 differential pairs on `ai0/ai8` through `ai6/ai14` (`ai7/ai15` unused).
+  - Raw values: Measured voltage (V) across differential inputs (or across shunt resistors for 4–20 mA loops).
+- **Slot 3: NI-9411 or NI-9401 (Digital Counter)**: Three digital input terminals (e.g. `PFI0`, `PFI1`, `PFI2`) routed to chassis counter resources (e.g. `ctr0`, `ctr1`, `ctr2`).
+  - Raw values: Cumulative hardware pulse count per channel.
+
+All channel names (`name`) can be customized in your YAML configuration (e.g. `rig.local.yaml`) to match your experiment. Names must use 1–50 ASCII letters, digits, or underscores starting with a letter (`[A-Za-z][A-Za-z0-9_]{0,49}`), and must be unique across all streams.
+
+### Reference template mapping (default `configs/rig.yaml`)
+
+The table below illustrates the default template included with `configs/rig.yaml`. These specific sensor names and assignments can be customized in your configuration:
+
+| Stream | NI physical channel | Negative terminal | Default channel name | Template sensor description |
 |---|---|---|---|---|
-| RTD | `cDAQ1Mod1/ai0` | 4-wire RTD connection | `t_air_in_raw_c` | `t_air_in_c` |
-| RTD | `cDAQ1Mod1/ai1` | 4-wire RTD connection | `t_air_out_raw_c` | `t_air_out_c` |
-| RTD | `cDAQ1Mod1/ai2` | 4-wire RTD connection | `t_water_upper_raw_c` | `t_water_upper_c` |
-| RTD | `cDAQ1Mod1/ai3` | 4-wire RTD connection | `t_water_bulk_raw_c` | `t_water_bulk_c` |
-| Analog | `cDAQ1Mod2/ai0` | `AI8` | `v_changor_t_v` | `t_ambient_c` |
-| Analog | `cDAQ1Mod2/ai1` | `AI9` | `v_changor_rh_v` | `rh_ambient_pct` |
-| Analog | `cDAQ1Mod2/ai2` | `AI10` | `v_p_atm_v` | `p_atm_pa` |
-| Analog | `cDAQ1Mod2/ai3` | `AI11` | `v_p_water_in_v` | `p_water_in_pa` |
-| Analog | `cDAQ1Mod2/ai4` | `AI12` | `v_p_water_out_v` | `p_water_out_pa` |
-| Analog | `cDAQ1Mod2/ai5` | `AI13` | `v_dp_air_v` | `dp_air_duct_pa` |
-| Analog | `cDAQ1Mod2/ai6` | `AI14` | `v_air_velocity_v` | `v_air_m_s` |
-| Counter | `cDAQ1Mod3/ctr0` | source `/cDAQ1Mod3/PFI0` | `water_pulse_count` | `f_water_hz`, `q_water_l_min` |
+| RTD | `cDAQ1Mod1/ai0` | 4-wire connection | `t_water_in_c` | Water inlet temperature |
+| RTD | `cDAQ1Mod1/ai1` | 4-wire connection | `t_water_out_c` | Water outlet temperature |
+| RTD | `cDAQ1Mod1/ai2` | 4-wire connection | `t_water_level_quarter_c` | Tank water temperature at 1/4 level |
+| RTD | `cDAQ1Mod1/ai3` | 4-wire connection | `t_water_level_three_quarters_c` | Tank water temperature at 3/4 level |
+| Analog | `cDAQ1Mod2/ai0` | `AI8` | `t_air_in_c` | Inlet air temperature (4–20 mA, shunt R1) |
+| Analog | `cDAQ1Mod2/ai1` | `AI9` | `t_air_out_c` | Outlet air temperature (4–20 mA, shunt R2) |
+| Analog | `cDAQ1Mod2/ai2` | `AI10` | `p_atm_pa` | Barometric pressure (4–20 mA, shunt R3) |
+| Analog | `cDAQ1Mod2/ai3` | `AI11` | `rh_ambient_pct` | Ambient relative humidity (4–20 mA, shunt R4) |
+| Analog | `cDAQ1Mod2/ai4` | `AI12` | `dp_air_duct_pa` | Air differential pressure (4–20 mA, shunt R5) |
+| Analog | `cDAQ1Mod2/ai5` | `AI13` | `level_water_m` | Tank water level (0–10 V voltage linear) |
+| Analog | `cDAQ1Mod2/ai6` | `AI14` | `power_motor_w` | Motor electrical power (0–10 V voltage linear) |
+| Counter | `cDAQ1Mod3/ctr0` | source `/cDAQ1Mod3/PFI0` | `water_flow_in` | Water inlet flow pulses (Hall sensor) |
+| Counter | `cDAQ1Mod3/ctr1` | source `/cDAQ1Mod3/PFI1` | `water_flow_out` | Water outlet flow pulses (Hall sensor) |
+| Counter | `cDAQ1Mod3/ctr2` | source `/cDAQ1Mod3/PFI2` | `impeller_rpm` | Axis impeller revolutions (pulse tachometer) |
 
-The NI-9204 is explicitly configured as `DIFF`. Its negative inputs are not added as extra DAQ channels. `ai7/ai15` remains unused. R1, R2, R3, R4 and R5 are associated with Changor T, Changor RH, barometric pressure, air differential pressure, and air velocity respectively. R6-R10 are spares and have no software channels. The unused fourth chassis slot remains unused.
+The NI-9204 is explicitly configured as `DIFF`. Its negative inputs are paired differential returns and are not added as extra DAQ channels; `ai7/ai15` remains unused. In the template configuration, R1–R5 are associated with the five current-loop channels (`ai0` through `ai4`); the two 0–10 V channels (`ai5` for water level in `m` and `ai6` for motor electrical power in `W`) are configured with `scale.kind: voltage_linear` and connect directly without a shunt. The unused fourth chassis slot remains unused.
 
-The counter resource is selected explicitly; `tankdaq devices` lists the available counter names and PFI terminals. If your installation enumerates the counter under the chassis rather than the module, set `hardware.counter_channel` to the exact listed resource. Keep `pulse_terminal` pointed at the physical NI-9411 input. Resource existence is checked first; DAQmx task commit validates the route. The software never substitutes another input automatically.
+Each counter channel's resource is selected explicitly under `counter.channels`; `tankdaq devices` lists the available counter names and PFI terminals. If your installation enumerates counters under the chassis rather than the module, set each channel's `physical` field to the exact listed resource (e.g. `cDAQ1/ctr0`, `cDAQ1/ctr1`, `cDAQ1/ctr2`). Keep each `pulse_terminal` pointed at the physical NI-9411 or NI-9401 input (`PFI0`, `PFI1`, `PFI2`). Resource existence is checked first; DAQmx task commit validates the routes. The software never substitutes another input automatically.
 
-## 4. Commission the real hardware
+## 4. Hardware commissioning
 
-Install an NI-DAQmx driver version that supports **all four actual hardware models** on your Windows version. The Python wheel alone is not the driver. Close NI MAX test panels, LabVIEW VIs and any other process that owns the same hardware before acquisition.
+To avoid duplicate documentation, detailed step-by-step procedures, electrical checks, scaling transfer functions, and operational acceptance tests are consolidated in the **[Hardware Commissioning Guide & Checklist](docs/COMMISSIONING.md)**.
 
-Install the Python interface and enumerate devices:
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install -e ".[ni,test]"
-.\.venv\Scripts\python.exe -m tankdaq devices --output devices.json
-Copy-Item configs\rig.yaml configs\rig.local.yaml
-notepad configs\rig.local.yaml
-```
-
-In `rig.local.yaml`, use the exact NI device and channel names. Do not edit `demo.yaml` into a hardware configuration: its ranges are synthetic examples.
-
-Before enabling hardware, verify the physical wiring against the manufacturers' connector diagrams, supplies, shunts, common-mode limits and the laboratory electrical design. Then set the following checks to `true` only when completed:
-
-```yaml
-checks:
-  wiring_verified: true
-  sensor_supplies_verified: true
-  rtd_curve_verified: true
-  hall_logic_verified: true
-```
-
-The RTD template uses NI's `PT_3851` curve, 100 ohms at 0 C, four wires and 1 mA internal excitation. Verify the selected curve against the delivered PT100 documentation/certificate, rather than inferring it solely from the quotation's rounded alpha. No custom Callendar-Van Dusen curve is implemented. The temperature interval in the config is a requested acquisition interval, not a temperature safety limit.
-
-The provisional Changor design has two independent 4-20 mA outputs. This assumption remains in the configuration; software cannot establish whether the delivered device actually has those outputs. The airflow sensor also needs an actual model, configured output range and installation before its channel is considered experimental data.
-
-First collect **raw commissioning data**:
-
-```powershell
-.\.venv\Scripts\python.exe -m tankdaq validate --config configs\rig.local.yaml --backend ni --raw-only --acknowledge-wiring
-.\.venv\Scripts\python.exe -m tankdaq run --config configs\rig.local.yaml --backend ni --raw-only --acknowledge-wiring --duration 60
-```
-
-`validate` checks configuration only; it does not open hardware or certify wiring. `run` additionally verifies inventory and prepares/commits the tasks. Preparing an RTD task may establish excitation. No hardware acquisition starts without explicit acknowledgement. NI MAX simulated devices are refused by the hardware backend; use the built-in simulator instead.
-
-In raw-only mode, all seven analog voltages and counter counts/frequency are recorded, but transmitter engineering values and water flow in L/min are null. RTD temperatures remain available because the NI-9217 task already returns DAQmx-linearized degrees Celsius. Those are not raw resistance/ADC codes and should not be represented as such.
-
-Next establish each transmitter's delivered signal variant and engineering endpoints in the config. Use the actual measured shunt resistance in `shunt_ohm`. Set `scale.confirmed: true` and give a meaningful `calibration_id` or verified-datasheet identifier. In this application, **confirmed means that the selected transfer function is established**, not that an accredited calibration has been performed. Store the calibration certificate and uncertainty assessment separately.
-
-A current-loop channel computes:
-
-```text
-I_mA = 1000 * V_measured / R_measured
-Y = Y_min + (I_mA - I_min) / (I_max - I_min) * (Y_max - Y_min)
-Y_corrected = Y * post_gain + post_offset
-```
-
-A voltage-output channel uses the same interpolation with its confirmed voltage endpoints. No engineering values are clipped at the configured endpoints. Out-of-range signals receive quality flags. Raw values are always kept.
-
-Confirm the Hall coefficient, set `counter.calibration_confirmed: true`, and record its source in `counter.calibration_id`. Once all scales are confirmed, omit `--raw-only`:
-
-```powershell
-.\.venv\Scripts\python.exe -m tankdaq run --config configs\rig.local.yaml --backend ni --acknowledge-wiring --duration 3600
-```
-
-Omit `--duration` for an operator-stopped run. Omitting it does not create background scheduling: the terminal process must remain running. Do not allow Windows sleep/hibernation during acquisition.
+Before collecting research data with the physical rig, follow [`docs/COMMISSIONING.md`](docs/COMMISSIONING.md).
 
 ## 5. Run files and exports
 
@@ -155,13 +132,30 @@ runs/<UTC>_NI_agitated_tank_<unique>/
   COMPLETED / INTERRUPTED / FAILED
 ```
 
-`RUNNING` exists until normal finalization. A stale `RUNNING` marker after a crash means the run was not cleanly finalized; do not simply rename it to `COMPLETED`. SQLite `-wal` and `-shm` files may exist while writing. Do not copy only the database during an active run, place live databases on a network/sync folder, or move the run directory while acquisition is active. Copy the entire finalized run to long-term storage.
+`RUNNING` exists until normal finalization. A stale `RUNNING` marker after a crash means the run was not cleanly finalized. SQLite `-wal` and `-shm` files may exist while writing. Do not copy only the database during an active run, place live databases on a network/sync folder, or move the run directory while acquisition is active. Copy the entire finalized run to long-term storage.
 
-SQLite is the always-on application record, with one writer, WAL mode and full synchronization at commits. The default commit interval is one second. An abrupt process/power failure can lose the current uncommitted tail; UPS/storage reliability remains an experimental responsibility. Queue overflow, driver errors, sample-index discontinuities, missing required streams, disk threshold violations and writer failures fail the run rather than being silently ignored. Shutdown attempts to stop each analog task and drain its buffered tail; a drain failure is recorded, not reported as complete.
+SQLite is the always-on application record, with one writer, WAL mode and full synchronization at commits. The default commit interval is one second. An abrupt process/power failure can lose the current uncommitted tail; UPS/storage reliability remains an experimental responsibility. Queue overflow, driver errors, sample-index discontinuities, missing required streams, disk threshold violations and writer failures fail the run rather than being silently ignored. Shutdown attempts to stop each analog task and drain its buffered tail; a drain failure is recorded.
 
-NI runs additionally request **separate driver TDMS files for each AI task**. These use `LOG_AND_READ`; reads must continue for NI-DAQmx to stream the data. TDMS is not an independent fail-safe logger if Python or the read loop stalls. Counter polls and external RPM are not written to those TDMS files; their records are SQLite and external attachments respectively. The simulator does not fabricate TDMS files.
+NI runs additionally request **separate driver TDMS files for each AI task**. These use `LOG_AND_READ`; reads must continue for NI-DAQmx to stream the data. TDMS is not an independent fail-safe logger if Python or the read loop stalls. Counter polls and external RPM attachments are stored in SQLite and `external_rpm/` respectively. The simulator does not fabricate TDMS files.
 
-Export a finalized run:
+### Automatic Export on Completion (Optional)
+
+You can configure the runner to automatically export CSV or Parquet files as soon as acquisition finalizes cleanly (without having to run a separate export command) by setting true/false flags under `storage:` in your YAML configuration:
+
+```yaml
+storage:
+  tdms: true
+  auto_export_csv: true        # Automatically generates export_csv_<hash>/ upon finalization
+  auto_export_parquet: false   # Automatically generates export_parquet_<hash>/ (requires PyArrow)
+  min_free_mb: 500.0
+  commit_interval_s: 1.0
+```
+
+When enabled, the coordinator runs the export immediately after all buffered samples are drained and SQLite transactions are closed. Any export failure is safely captured without compromising the underlying SQLite database.
+
+### Manual Export of a Finalized Run
+
+You can also export any finalized run manually at any time:
 
 ```powershell
 .\.venv\Scripts\python.exe -m tankdaq export "$run" --format csv
@@ -171,11 +165,9 @@ Export a finalized run:
 
 Exports are long-form: one row per channel and sample, retaining raw and engineering values, quality flags and stream timestamps. CSV requires no additional library. Parquet requires optional PyArrow. The export does not interpolate channels onto a common time grid. See `docs/DATA_FORMAT.md` and `docs/TIMING.md` before combining streams.
 
-## 6. External impeller RPM and operator notes
+## 6. Operator notes and optional external RPM reference
 
-For a constant operating level, put your externally calculated `impeller_rpm`, calculation `method` and, if established, `uncertainty_rpm` in `external` before a run. The software records your value; it does not calculate or measure RPM.
-
-For a changing operating level, prepare a separate CSV with:
+In addition to the hardware `impeller_rpm` counter channel on `cDAQ1Mod3/ctr2`, the application supports recording an optional external RPM cross-reference (e.g., from a handheld optical tachometer or VFD display) in `external` or attaching a separate CSV:
 
 ```csv
 t_rel_s,n_impeller_rpm,method,uncertainty_rpm
@@ -183,25 +175,25 @@ t_rel_s,n_impeller_rpm,method,uncertainty_rpm
 300,48,external calibration curve revision 1,0.8
 ```
 
-Those numbers are illustrative, not your experiment's established settings or uncertainties. `examples/external_rpm_TEMPLATE.csv` contains only the header. Attach your completed file after the run:
+`examples/external_rpm_TEMPLATE.csv` contains only the header. Attach a completed file after the run:
 
 ```powershell
 .\.venv\Scripts\python.exe -m tankdaq attach-rpm "$run" --csv .\my_rpm.csv --alignment-note "External record aligned to this run's acquisition t=0; describe how and give any known timing uncertainty."
 ```
 
-The original CSV and SHA-256 are preserved. No interpolation or timestamp offset is guessed. For events during a run:
+The original CSV and SHA-256 are preserved. For operator events during a run:
 
 ```powershell
-.\.venv\Scripts\python.exe -m tankdaq note "$run" "Operator changed the externally recorded impeller setting."
+.\.venv\Scripts\python.exe -m tankdaq note "$run" "Operator changed the impeller speed setting."
 ```
 
 Operator notes use host wall-clock time and are labeled accordingly; clock changes can affect their alignment.
 
 ## 7. What this release does not claim
 
-The tasks are **not hardware-synchronized to each other**. Timestamps on different modules must not be treated as exactly simultaneous. RTD and multiplexed analog channel conversion/filter delays are not corrected. The default architecture is for low-rate thermal measurements, not proof of suitability for fast transient system identification. See the timing document.
+The tasks are **not hardware-synchronized to each other**. Timestamps on different modules must not be treated as exactly simultaneous. RTD and multiplexed analog channel conversion/filter delays are not corrected. The default architecture is for low-rate thermal and process measurements, not proof of suitability for fast transient system identification. See the timing document.
 
-The application does not verify pressure plumbing, gauge versus absolute pressure reference, Hall pull-up wiring, 24 V common-mode safety, airflow profile representativeness, or exact sensor electrical variants. Those are physical commissioning requirements. It does not infer volumetric airflow from a single velocity reading, infer water heat duty from two tank temperatures, or calculate psychrometrics/heat-transfer coefficients without the missing physical assumptions.
+The application does not verify pressure plumbing, gauge versus absolute pressure reference, Hall pull-up wiring, 24 V common-mode safety, airflow profile representativeness, or exact sensor electrical variants. Those are physical commissioning requirements.
 
 There is no browser dashboard in this release; the live display is the implemented terminal `watch` command. There is no LabVIEW component, Modbus backend, motor controller, automatic restart of a failed acquisition, or automatic replacement of a missing sensor by simulated data.
 
@@ -211,6 +203,35 @@ There is no browser dashboard in this release; the live display is the implement
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-`src/tankdaq/` contains separate configuration, scaling, backend, storage, coordinator and CLI modules. `tests/` covers safety/configuration gates, differential channel mapping, scaling, count rollover, zero-pulse ambiguity, rolling-window timing, raw-only acquisition, failure handling, simulation integration, CSV export and API contract construction. Optional Parquet tests skip when PyArrow is absent.
+Automated suite: **66 passed** tests covering safety/configuration gates, configurable channel names and syntax validation, differential channel mapping, multi-channel counter routing, scaling, count rollover, zero-pulse ambiguity, rolling-window timing, raw-only acquisition, failure handling, simulation integration, CSV export, Parquet export, and NI API contract mocks (including both NI-9411 and NI-9401 digital counter modules).
 
-The source basis is the agreed wiring specification and the two supplied DAQ Solutions quotations. Unknown or contradictory sensor details remain unconfirmed. NI API behaviors were checked against primary NI documentation. See `docs/SOURCES.md`, `docs/COMMISSIONING.md`, `TEST_REPORT.md` and the included test output.
+### Repository Structure
+
+```text
+agitated-tank-daq/
+├── .gitattributes            # Git LFS tracking configuration for binary assets
+├── configs/                  # Configurations: template (rig.yaml), simulation (demo.yaml), and pilot demo (pilot.demo.yaml)
+├── docs/                     # Technical documentation
+│   ├── calibrations/         # Calibration certificates, provenance register, and Git LFS storage
+│   ├── COMMISSIONING.md      # Five-phase hardware commissioning checklist
+│   ├── DATA_FORMAT.md        # SQLite and export schema specification
+│   ├── SOURCES.md            # Hardware quotes, sensor specifications, and references
+│   └── TIMING.md             # Timing, sampling, counter latency, and jitter documentation
+├── examples/                 # Sample simulated run artifacts and external RPM template
+├── scripts/                  # Convenience PowerShell scripts (setup.ps1, run_demo.ps1)
+├── src/tankdaq/              # Core Python package
+│   ├── __init__.py           # Package metadata and version
+│   ├── __main__.py           # Entrypoint for python -m tankdaq
+│   ├── backends.py           # Worker abstractions and synthetic simulation producers
+│   ├── cli.py                # CLI parser and command dispatch
+│   ├── config.py             # Config loading, syntax validation, and safety verification
+│   ├── data_tools.py         # Read-only inspection, live terminal monitor, export, and RPM attachment
+│   ├── models.py             # Data classes (AnalogBlock, CounterPoint, Clock, WorkerOutcome)
+│   ├── ni_backend.py         # NI-DAQmx hardware workers (NI-9217, NI-9204, NI-9411/NI-9401)
+│   ├── runner.py             # Coordinator: worker threads, bounded queue, failure tracking
+│   ├── scaling.py            # Voltage scaling, current loop math, and rolling pulse-rate calculation
+│   └── storage.py            # Transactional SQLite writer, WAL checkpoints, metadata tracking
+└── tests/                    # Automated pytest suite (61 tests across 3 test modules)
+```
+
+The source basis is the agreed wiring specification and the two supplied DAQ Solutions quotations. Unknown or contradictory sensor details remain unconfirmed. NI API behaviors were checked against primary NI documentation. See [`docs/SOURCES.md`](docs/SOURCES.md), [`docs/COMMISSIONING.md`](docs/COMMISSIONING.md), [`TEST_REPORT.md`](TEST_REPORT.md), and the included test output.

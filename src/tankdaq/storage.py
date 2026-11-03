@@ -20,7 +20,7 @@ PRAGMA journal_mode=WAL;
 PRAGMA synchronous=FULL;
 CREATE TABLE metadata (key TEXT PRIMARY KEY, value_json TEXT NOT NULL);
 CREATE TABLE channels (
- name TEXT PRIMARY KEY, raw_name TEXT NOT NULL, stream TEXT NOT NULL,
+ name TEXT PRIMARY KEY, stream TEXT NOT NULL,
  physical_channel TEXT NOT NULL, unit TEXT NOT NULL, definition_json TEXT NOT NULL);
 CREATE TABLE samples (
  stream TEXT NOT NULL, sample_index INTEGER NOT NULL, channel TEXT NOT NULL,
@@ -30,11 +30,13 @@ CREATE TABLE samples (
  quality TEXT NOT NULL, simulated INTEGER NOT NULL,
  PRIMARY KEY (stream, sample_index, channel));
 CREATE TABLE counter (
- poll_index INTEGER PRIMARY KEY, t_rel_s_est REAL NOT NULL, utc_ns_est INTEGER NOT NULL,
+ poll_index INTEGER NOT NULL, channel TEXT NOT NULL, physical_channel TEXT NOT NULL,
+ pulse_terminal TEXT NOT NULL, t_rel_s_est REAL NOT NULL, utc_ns_est INTEGER NOT NULL,
  read_duration_s REAL NOT NULL, count_raw INTEGER NOT NULL, count_unwrapped INTEGER NOT NULL,
  window_start_s REAL NOT NULL, window_end_s REAL NOT NULL, window_counts INTEGER NOT NULL,
- frequency_hz REAL, flow_l_min REAL, one_count_resolution_l_min REAL,
- quality TEXT NOT NULL, simulated INTEGER NOT NULL);
+ frequency_hz REAL, value REAL, unit TEXT NOT NULL, one_count_resolution REAL,
+ quality TEXT NOT NULL, simulated INTEGER NOT NULL,
+ PRIMARY KEY (poll_index, channel));
 CREATE TABLE events (
  id INTEGER PRIMARY KEY AUTOINCREMENT, utc_ns INTEGER NOT NULL,
  t_rel_s REAL, severity TEXT NOT NULL, source TEXT NOT NULL, message TEXT NOT NULL);
@@ -74,7 +76,12 @@ class RunStore:
         self.db = sqlite3.connect(folder/"measurements.sqlite", timeout=10)
         self.db.executescript(SCHEMA)
         self.last_commit = time.monotonic()
-        self.flow = FlowWindow(cfg["sampling"]["flow_window_s"], cfg["counter"]["hz_per_l_min"])
+        self.counter_channels = {ch["name"]: ch for ch in cfg["counter"]["channels"]}
+        self.flows = {
+            ch["name"]: FlowWindow(cfg["sampling"]["flow_window_s"], ch["hz_per_unit"], cfg["counter"]["bits"])
+            for ch in cfg["counter"]["channels"]
+        }
+        self.counter_next_index = {ch["name"]: 0 for ch in cfg["counter"]["channels"]}
         self.rows = {"rtd": 0, "analog": 0, "counter": 0}
         self.next_index = {"rtd": 0, "analog": 0, "counter": 0}
         self.meta = dict(run_id=folder.name, backend=backend, simulated=backend=="sim",
@@ -82,10 +89,10 @@ class RunStore:
                          environment=environment(), config=cfg, streams={}, row_counts=self.rows,
                          timing_policy="Independent hardware-timed AI tasks; host-estimated start offsets. "
                          "Counter polls have host-midpoint timestamps. No cross-module synchronization guarantee.")
-        for stream in ("rtd", "analog"):
+        for stream in ("rtd", "analog", "counter"):
             for ch in cfg[stream]["channels"]:
-                self.db.execute("INSERT INTO channels VALUES (?,?,?,?,?,?)",
-                                (ch["name"], ch["raw_name"], stream, ch["physical"],
+                self.db.execute("INSERT INTO channels VALUES (?,?,?,?,?)",
+                                (ch["name"], stream, ch["physical"],
                                  ch.get("unit", "degC"), json.dumps(ch)))
         self.save_metadata()
 
@@ -139,18 +146,24 @@ class RunStore:
             self.next_index[item.stream] += n
             self.rows[item.stream] += len(rows)
         else:
-            if item.index != self.next_index["counter"]:
-                raise ValueError("Counter-poll index gap/duplicate")
-            c = self.cfg["counter"]
-            result = self.flow.update(item.t_rel_s, item.count, scale_confirmed=c["calibration_confirmed"],
-                                      raw_only=self.raw_only, valid_range=c["valid_flow_l_min"])
+            if item.channel not in self.counter_channels:
+                raise ValueError(f"Unknown counter channel: {item.channel}")
+            if item.index != self.counter_next_index[item.channel]:
+                raise ValueError(f"Counter-poll index gap/duplicate in {item.channel}")
+            c = self.counter_channels[item.channel]
+            result = self.flows[item.channel].update(
+                item.t_rel_s, item.count, scale_confirmed=c["calibration_confirmed"],
+                raw_only=self.raw_only, valid_range=c["valid_range"]
+            )
             quality = ("SIMULATED|" if item.simulated else "")+result["quality"]
-            self.db.execute("INSERT INTO counter VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                            (item.index, item.t_rel_s, self.clock.epoch_for(item.t_rel_s), item.read_duration_s,
+            self.db.execute("INSERT INTO counter VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                            (item.index, item.channel, c["physical"], c["pulse_terminal"],
+                             item.t_rel_s, self.clock.epoch_for(item.t_rel_s), item.read_duration_s,
                              item.count, result["count_unwrapped"], result["window_start_s"], result["window_end_s"],
-                             result["window_counts"], result["frequency_hz"], result["flow_l_min"],
-                             result["one_count_resolution_l_min"], quality, int(item.simulated)))
-            self.next_index["counter"] += 1
+                             result["window_counts"], result["frequency_hz"], result["value"], c["unit"],
+                             result["one_count_resolution"], quality, int(item.simulated)))
+            self.counter_next_index[item.channel] += 1
+            self.next_index["counter"] = min(self.counter_next_index.values())
             self.rows["counter"] += 1
         if time.monotonic()-self.last_commit >= self.cfg["storage"]["commit_interval_s"]:
             self.db.commit()

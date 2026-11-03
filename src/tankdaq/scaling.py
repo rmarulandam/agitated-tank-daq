@@ -1,4 +1,4 @@
-"""Transparent, unclipped engineering conversion and rolling pulse-count flow."""
+"""Transparent, unclipped engineering conversion and rolling pulse-count rate."""
 from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass
@@ -45,7 +45,7 @@ class FlowWindow:
 
     Counter readings are cumulative hardware counts. Their times are host-poll
     midpoints, not hardware-latched timestamps. A zero frequency cannot distinguish
-    zero water flow from failed/disconnected pulse wiring.
+    zero flow/rotation from failed/disconnected pulse wiring.
     """
     def __init__(self, window_s: float, coefficient: float, bits: int = 32):
         self.window_s = window_s
@@ -73,7 +73,7 @@ class FlowWindow:
         dt, dn = t-t0, self.total-n0
         frequency = dn/dt if dt > 0 else None
         resolution = 1.0/(dt*self.coefficient) if dt > 0 and scale_confirmed and not raw_only else None
-        flow = frequency/self.coefficient if frequency is not None and scale_confirmed and not raw_only else None
+        scaled = frequency/self.coefficient if frequency is not None and scale_confirmed and not raw_only else None
         flags: list[str] = []
         if dt < self.window_s - 1e-6:
             flags.append("WARMUP")
@@ -83,9 +83,10 @@ class FlowWindow:
             flags.append("RAW_ONLY")
         elif not scale_confirmed:
             flags.append("UNCONFIRMED_SCALE")
-        if flow is not None and flow != 0 and not valid_range[0] <= flow <= valid_range[1]:
+        if scaled is not None and scaled != 0 and not valid_range[0] <= scaled <= valid_range[1]:
             flags.append("OUTSIDE_SENSOR_FLOW_RANGE")
         return dict(count_unwrapped=self.total, window_start_s=t0, window_end_s=t,
-                    window_counts=dn, frequency_hz=frequency, flow_l_min=flow,
+                    window_counts=dn, frequency_hz=frequency, value=scaled,
+                    flow_l_min=scaled, one_count_resolution=resolution,
                     one_count_resolution_l_min=resolution,
                     quality="|".join(flags) if flags else "OK")

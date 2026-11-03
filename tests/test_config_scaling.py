@@ -4,8 +4,11 @@ import pytest
 from tankdaq.config import validate,ConfigError
 from tankdaq.scaling import convert_voltage,FlowWindow
 
-def test_templates_valid(demo,rig):
-    validate(demo);validate(rig)
+def test_templates_valid(demo,rig,pilot_demo):
+    validate(demo);validate(rig);validate(pilot_demo)
+
+def test_pilot_demo_hardware_ready(pilot_demo):
+    validate(pilot_demo,backend='ni',acknowledge_wiring=True)
 
 def test_simulation_cannot_run_hardware(demo):
     with pytest.raises(ConfigError,match='simulation_only'):
@@ -38,7 +41,7 @@ def test_wrong_differential_pair(demo):
     with pytest.raises(ConfigError,match='differential pairs'):validate(demo)
 
 def test_no_guessed_signal_range(demo):
-    demo['analog']['channels'][3]['scale']['signal_range_v']=None
+    demo['analog']['channels'][5]['scale']['signal_range_v']=None
     with pytest.raises(ConfigError,match='signal_range_v'):validate(demo)
 
 def test_unknown_top_level_key(demo):
@@ -51,32 +54,34 @@ def test_scales_outside_daq_range(demo):
 
 @pytest.mark.parametrize('voltage,expected',[(1.,0.),(3.,50.),(5.,100.)])
 def test_current_scale_endpoints(demo,voltage,expected):
-    ch=demo['analog']['channels'][1]
+    ch=demo['analog']['channels'][3]
     assert convert_voltage(voltage,ch,raw_only=False).value==pytest.approx(expected)
 
-@pytest.mark.parametrize('voltage,fraction',[(.5,0.),(2.5,.5),(4.5,1.)])
-def test_pressure_scale(demo,voltage,fraction):
-    ch=demo['analog']['channels'][3]
-    assert convert_voltage(voltage,ch,raw_only=False).value==pytest.approx(fraction*551580.58345344)
+@pytest.mark.parametrize('voltage,fraction',[(0.,0.),(5.,.5),(10.,1.)])
+def test_voltage_linear_scale(demo,voltage,fraction):
+    ch_level=demo['analog']['channels'][5]
+    ch_power=demo['analog']['channels'][6]
+    assert convert_voltage(voltage,ch_level,raw_only=False).value==pytest.approx(fraction*2.0)
+    assert convert_voltage(voltage,ch_power,raw_only=False).value==pytest.approx(fraction*1500.0)
 
 def test_measured_shunt_is_used(demo):
-    ch=demo['analog']['channels'][1];ch['scale']['shunt_ohm']=249.
+    ch=demo['analog']['channels'][3];ch['scale']['shunt_ohm']=249.
     assert convert_voltage(.012*249.,ch,raw_only=False).value==pytest.approx(50.)
 
 def test_scale_no_clipping(demo):
-    result=convert_voltage(5.4,demo['analog']['channels'][1],raw_only=False)
+    result=convert_voltage(5.4,demo['analog']['channels'][3],raw_only=False)
     assert result.value>100.
     assert 'OUTSIDE_NOMINAL_SIGNAL' in result.quality
 
 def test_unconfirmed_returns_null(rig):
-    assert convert_voltage(3.,rig['analog']['channels'][1],raw_only=False).value is None
+    assert convert_voltage(3.,rig['analog']['channels'][3],raw_only=False).value is None
 
 def test_raw_only_never_returns_scaled_value(demo):
-    result=convert_voltage(3.,demo['analog']['channels'][1],raw_only=True)
+    result=convert_voltage(3.,demo['analog']['channels'][3],raw_only=True)
     assert result.value is None and 'RAW_ONLY' in result.quality
 
 def test_nonfinite_voltage(demo):
-    result=convert_voltage(float('nan'),demo['analog']['channels'][1],raw_only=False)
+    result=convert_voltage(float('nan'),demo['analog']['channels'][3],raw_only=False)
     assert result.value is None and result.quality=='NONFINITE_INPUT'
 
 def update(f,t,n,confirmed=True,raw=False):
@@ -87,26 +92,28 @@ def test_flow_frequency_and_resolution():
     update(f,0.,0)
     r=update(f,10.,150)
     assert r['frequency_hz']==15.
+    assert r['value']==30.
     assert r['flow_l_min']==30.
+    assert r['one_count_resolution']==pytest.approx(.2)
     assert r['one_count_resolution_l_min']==pytest.approx(.2)
 
 def test_counter_rollover():
     f=FlowWindow(1.,.5)
     update(f,0.,2**32-3)
     r=update(f,1.,2)
-    assert r['window_counts']==5 and r['flow_l_min']==10.
+    assert r['window_counts']==5 and r['value']==10.
 
 def test_counter_zero_and_warmup():
     f=FlowWindow(10.,.5)
     assert update(f,0.,0)['frequency_hz'] is None
     r=update(f,2.,0)
-    assert r['flow_l_min']==0.
+    assert r['value']==0.
     assert 'WARMUP' in r['quality'] and 'SIGNAL_LOSS' in r['quality']
 
 def test_counter_unconfirmed_keeps_frequency():
     f=FlowWindow(1.,.5);update(f,0.,0)
     r=update(f,1.,10,confirmed=False)
-    assert r['frequency_hz']==10. and r['flow_l_min'] is None
+    assert r['frequency_hz']==10. and r['value'] is None
 
 def test_counter_uses_actual_time():
     f=FlowWindow(1.,.5);update(f,.123,0)
@@ -121,18 +128,18 @@ def test_rolling_window_bounded():
     f=FlowWindow(10.,.5)
     for i in range(1000):r=update(f,float(i),i*15)
     assert len(f.history)<=12
-    assert r['flow_l_min']==30.
-
+    assert r['value']==30.
 
 def test_custom_channel_names_accepted(demo):
     custom_rtd = ["t_inlet_c", "t_outlet_c", "t_top_c", "t_bottom_c"]
     for i, name in enumerate(custom_rtd):
         demo["rtd"]["channels"][i]["name"] = name
-        demo["rtd"]["channels"][i]["raw_name"] = name + "_raw_c"
-    custom_analog = ["t_amb_c", "humidity_pct", "p_baro_pa", "p_in_pa", "p_out_pa", "dp_duct_pa", "air_vel_m_s"]
+    custom_analog = ["t_air_1_c", "t_air_2_c", "p_baro_pa", "humidity_pct", "dp_duct_pa", "water_lvl_m", "motor_pwr_w"]
     for i, name in enumerate(custom_analog):
         demo["analog"]["channels"][i]["name"] = name
-        demo["analog"]["channels"][i]["raw_name"] = "v_" + name
+    custom_counters = ["q_in_l_min", "q_out_l_min", "shaft_rpm"]
+    for i, name in enumerate(custom_counters):
+        demo["counter"]["channels"][i]["name"] = name
     validate(demo)
 
 def test_rtd_count_must_be_four(demo):
@@ -145,25 +152,34 @@ def test_analog_count_must_be_seven(demo):
     with pytest.raises(ConfigError, match="Seven analog channels are required"):
         validate(demo)
 
+def test_counter_count_must_be_three(demo):
+    demo["counter"]["channels"] = demo["counter"]["channels"][:2]
+    with pytest.raises(ConfigError, match="Three counter channels are required"):
+        validate(demo)
+
+def test_duplicate_counter_physical_rejected(demo):
+    demo["counter"]["channels"][1]["physical"] = "cDAQ1Mod3/ctr0"
+    with pytest.raises(ConfigError, match="Counter physical channels must be unique"):
+        validate(demo)
+
 def test_invalid_channel_name_format(demo):
     demo["rtd"]["channels"][0]["name"] = "123_invalid"
     with pytest.raises(ConfigError, match=r"rtd\[0\]\.name"):
         validate(demo)
 
-def test_invalid_raw_name_format(demo):
-    demo["analog"]["channels"][0]["raw_name"] = "invalid-name!"
-    with pytest.raises(ConfigError, match="raw_name"):
-        validate(demo)
-
-def test_rtd_raw_name_must_end_in_raw_c(demo):
-    demo["rtd"]["channels"][0]["raw_name"] = "t_inlet_raw_k"
-    with pytest.raises(ConfigError, match="must end in _raw_c"):
-        validate(demo)
-
 def test_duplicate_channel_name_rejected(demo):
     demo["rtd"]["channels"][0]["name"] = "duplicate_name"
     demo["rtd"]["channels"][1]["name"] = "duplicate_name"
-    demo["rtd"]["channels"][0]["raw_name"] = "duplicate_name_raw_c"
-    demo["rtd"]["channels"][1]["raw_name"] = "duplicate_name_2_raw_c"
     with pytest.raises(ConfigError, match="unique"):
+        validate(demo)
+
+
+def test_storage_auto_export_boolean_check(demo):
+    demo["storage"]["auto_export_csv"] = "yes"
+    with pytest.raises(ConfigError, match="storage.auto_export_csv"):
+        validate(demo)
+
+    demo["storage"]["auto_export_csv"] = True
+    demo["storage"]["auto_export_parquet"] = 123
+    with pytest.raises(ConfigError, match="storage.auto_export_parquet"):
         validate(demo)

@@ -40,7 +40,7 @@ def export_run(folder: Path, fmt: str, output: Path | None = None) -> Path:
             # Table names are from the constant allow-list, never user SQL.
             query = f"SELECT * FROM {name}"
             if name=="samples": query += " ORDER BY stream,sample_index,channel"
-            elif name=="counter": query += " ORDER BY poll_index"
+            elif name=="counter": query += " ORDER BY poll_index,channel"
             cursor = db.execute(query)
             columns = [x[0] for x in cursor.description]
             if fmt == "csv":
@@ -72,7 +72,9 @@ def inspect_run(folder: Path) -> dict[str, Any]:
                    "raw_only":info.get("raw_only"),"integrity":db.execute("PRAGMA quick_check").fetchone()[0]}
         summary["channel_samples"] = [dict(r) for r in db.execute(
             "SELECT stream,channel,count(*) AS n,min(sample_index) AS first_index,max(sample_index) AS last_index FROM samples GROUP BY stream,channel")]
-        summary["counter_polls"] = db.execute("SELECT count(*) FROM counter").fetchone()[0]
+        summary["counter_channels"] = [dict(r) for r in db.execute(
+            "SELECT channel,count(*) AS n,min(poll_index) AS first_index,max(poll_index) AS last_index FROM counter GROUP BY channel")]
+        summary["counter_polls"] = db.execute("SELECT count(DISTINCT poll_index) FROM counter").fetchone()[0]
         summary["faults"] = info.get("faults",[])
         return summary
     finally:
@@ -83,7 +85,8 @@ def watch(folder: Path,interval: float=2.0,once: bool=False) -> None:
         raise ValueError("Monitor interval must be positive")
     db=connect_readonly(folder)
     try:
-        names = [r[0] for r in db.execute("SELECT name FROM channels ORDER BY stream,name")]
+        names = [r[0] for r in db.execute("SELECT name FROM channels WHERE stream IN ('rtd','analog') ORDER BY stream,name")]
+        cnames = [r[0] for r in db.execute("SELECT name FROM channels WHERE stream='counter' ORDER BY name")]
         while True:
             print("\n"+time.strftime("%H:%M:%S")+" | "+folder.name)
             # A display-only connection, deliberately independent of DAQ task ownership.
@@ -92,10 +95,13 @@ def watch(folder: Path,interval: float=2.0,once: bool=False) -> None:
                 if row:
                     value = "unscaled" if row["value"] is None else f"{row['value']:.5g} {row['unit']}"
                     raw = "null" if row["raw_value"] is None else f"{row['raw_value']:.5g}"
-                    print(f"{name:22} {value:20} raw={raw:10} {row['raw_unit']:5} {row['quality']}")
-            flow=db.execute("SELECT * FROM counter ORDER BY poll_index DESC LIMIT 1").fetchone()
-            if flow:
-                print("water pulses:",flow["count_raw"],"frequency:",flow["frequency_hz"],"flow L/min:",flow["flow_l_min"],flow["quality"])
+                    print(f"{name:30} {value:20} raw={raw:10} {row['raw_unit']:5} {row['quality']}")
+            for cname in cnames:
+                crow = db.execute("SELECT * FROM counter WHERE channel=? ORDER BY poll_index DESC LIMIT 1",(cname,)).fetchone()
+                if crow:
+                    value = "unscaled" if crow["value"] is None else f"{crow['value']:.5g} {crow['unit']}"
+                    freq = "null" if crow["frequency_hz"] is None else f"{crow['frequency_hz']:.5g}"
+                    print(f"{cname:30} {value:20} pulses={crow['count_raw']:<8} f={freq:<8} Hz  {crow['quality']}")
             if once: break
             time.sleep(interval)
     except KeyboardInterrupt:

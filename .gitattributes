@@ -1,0 +1,12 @@
+# Git LFS configuration for calibration certificates and binary assets
+# See docs/calibrations/README.md for calibration asset handling procedures.
+
+# Track calibration document formats in docs/calibrations/
+docs/calibrations/*.pdf filter=lfs diff=lfs merge=lfs -text
+docs/calibrations/*.PDF filter=lfs diff=lfs merge=lfs -text
+docs/calibrations/*.tif filter=lfs diff=lfs merge=lfs -text
+docs/calibrations/*.tiff filter=lfs diff=lfs merge=lfs -text
+docs/calibrations/*.png filter=lfs diff=lfs merge=lfs -text
+docs/calibrations/*.jpg filter=lfs diff=lfs merge=lfs -text
+docs/calibrations/*.jpeg filter=lfs diff=lfs merge=lfs -text
+

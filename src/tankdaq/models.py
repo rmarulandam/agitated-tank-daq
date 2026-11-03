@@ -34,6 +34,7 @@ class AnalogBlock:
 
 @dataclass
 class CounterPoint:
+    channel: str
     index: int
     t_rel_s: float
     read_duration_s: float

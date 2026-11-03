@@ -2,11 +2,11 @@
 
 ## measurements.sqlite
 
-`channels` stores the engineering name, raw channel name, stream, physical channel, unit and the exact channel definition JSON. `samples` stores the four RTD and seven analog channels in long form. Its primary key is `(stream, sample_index, channel)`. Within each stream the writer enforces contiguous block indices.
+`channels` stores the channel name, stream (`rtd`, `analog`, or `counter`), physical channel, unit and the exact channel definition JSON. `samples` stores the four RTD and seven analog channels in long form. Its primary key is `(stream, sample_index, channel)`. Within each stream the writer enforces contiguous block indices.
 
-The `channel` field is the engineering identifier; its associated `raw_name` is in the `channels` table. `raw_value` is V for NI-9204, and **DAQmx-linearized degC** for NI-9217. No resistance or ADC-code capture is claimed. `value` contains an engineering conversion, or SQL NULL when scaling is unconfirmed/raw-only. RTD configured gain and offset are applied on top of the DAQmx temperature. `raw_value` remains unchanged. NaN/infinite inputs are stored as NULL with `NONFINITE_INPUT`, rather than ambiguous nonstandard JSON/SQLite NaNs.
+The `channel` field in `samples` matches the channel `name` in the `channels` table. `raw_value` is V for NI-9204, and **DAQmx-linearized degC** for NI-9217. No resistance or ADC-code capture is claimed. `value` contains an engineering conversion, or SQL NULL when scaling is unconfirmed/raw-only. RTD configured gain and offset are applied on top of the DAQmx temperature. `raw_value` remains unchanged. NaN/infinite inputs are stored as NULL with `NONFINITE_INPUT`, rather than ambiguous nonstandard JSON/SQLite NaNs.
 
-`counter` contains one row per host poll: raw count, unwrapped count relative to the first snapshot, actual rolling-window timestamps/counts, estimated frequency, confirmed flow, resolution and quality. The initial row has no frequency/flow. Subsequent warm-up rows are estimates over a short, explicitly recorded window. No-pulse rows are marked as ambiguous zero-flow/signal-loss observations.
+`counter` contains one row per counter channel (`water_flow_in`, `water_flow_out`, `impeller_rpm`) per host poll, with primary key `(poll_index, channel)`: channel name, physical counter, pulse terminal, poll timestamp, read duration, raw count, unwrapped count relative to the first snapshot, actual rolling-window timestamps/counts, estimated `frequency_hz`, confirmed `value` (`L/min` or `rpm`), `unit`, `one_count_resolution` and `quality`. The initial row for each channel has no frequency/value. Subsequent warm-up rows are estimates over a short, explicitly recorded window. No-pulse rows are marked as ambiguous zero-rate/signal-loss observations.
 
 `metadata` contains JSON values for configuration, environment/package versions, source-code hash, inventory, actual stream settings, clock anchor, run status, worker outcomes and errors. `metadata.json` mirrors these values at initialization/stream configuration/finalization; per-sample row counts in that file are finalized at run end. `events` includes runtime configuration/error records and operator notes. `acquisition.log` is a human-readable supplementary log.
 
@@ -24,6 +24,12 @@ Real NI runs optionally contain `rtd_raw.tdms` and `analog_raw.tdms` from DAQmx 
 
 A completed run has a `COMPLETED`, `INTERRUPTED` or `FAILED` status marker. A leftover `RUNNING` marker means the process did not finalize. On exceptional finalization failure, a `FAILURE.json` sidecar is attempted. Full recovery from power loss, filesystem failure or disconnected storage cannot be guaranteed.
 
-CSV/Parquet export writes all five database tables and a manifest. It does not alter the source, rescale old measurements, infer missing calibrations, or synchronize streams. An export is refused while `RUNNING` exists. A note added later changes the database; prior exported copies remain snapshots of the earlier database state.
+CSV/Parquet export writes all five database tables (`samples`, `counter`, `events`, `channels`, `metadata`) and an `export_manifest.json` into a dedicated subfolder (`export_csv_<hash>/` or `export_parquet_<hash>/`).
 
-External RPM attachments live under `external_rpm/` and retain their original content and hash. Run-level constant RPM is in `metadata.external_impeller`; neither is a cDAQ measurement.
+Exports can occur in two ways:
+1. **Automatic Export upon Finalization:** When `auto_export_csv: true` or `auto_export_parquet: true` is configured in `storage:`, the runner automatically exports the tables immediately after the database writer has finalized and the `RUNNING` sentinel is cleared.
+2. **Manual Post-Run Export:** Execute `tankdaq export <run_folder> --format csv` (or `--format parquet`) at any time on a finalized run folder.
+
+Exports do not alter the source database, rescale old measurements, infer missing calibrations, or synchronize streams. An export is refused while `RUNNING` exists. A note added later changes the database; prior exported copies remain snapshots of the earlier database state.
+
+Optional external RPM reference attachments live under `external_rpm/` and retain their original content and hash.

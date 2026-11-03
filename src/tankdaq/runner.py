@@ -200,6 +200,32 @@ def run(cfg: dict[str, Any], config_path: Path, output_root: Path, *, backend: s
             (folder/"RUNNING").unlink(missing_ok=True)
             (folder/status.upper()).write_text(status+"\n",encoding="utf-8")
             log_line("Final status: "+status)
+            if status in {"completed", "interrupted"}:
+                st = cfg.get("storage", {})
+                do_csv = bool(st.get("auto_export_csv") or st.get("export_csv"))
+                do_parquet = bool(st.get("auto_export_parquet") or st.get("export_parquet"))
+                if do_csv or do_parquet:
+                    from .data_tools import export_run
+                    if do_csv:
+                        try:
+                            exp_csv = export_run(folder, "csv")
+                            log_line(f"Auto-exported CSV to {exp_csv.name}")
+                            if not quiet:
+                                print(f"Auto-exported CSV: {exp_csv.resolve()}", flush=True)
+                        except Exception as exc:
+                            log_line(f"Auto-export CSV failed: {exc}")
+                            if not quiet:
+                                print(f"WARNING: Automatic CSV export failed: {exc}", flush=True)
+                    if do_parquet:
+                        try:
+                            exp_parquet = export_run(folder, "parquet")
+                            log_line(f"Auto-exported Parquet to {exp_parquet.name}")
+                            if not quiet:
+                                print(f"Auto-exported Parquet: {exp_parquet.resolve()}", flush=True)
+                        except Exception as exc:
+                            log_line(f"Auto-export Parquet failed: {exc}")
+                            if not quiet:
+                                print(f"WARNING: Automatic Parquet export failed: {exc}", flush=True)
         finally:
             log.close()
     if not quiet:

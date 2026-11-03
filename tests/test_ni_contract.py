@@ -77,13 +77,20 @@ def test_analog_contract(rig,tmp_path,fake_api):
     w.close()
 
 def test_counter_contract(rig,fake_api):
-    w=NICounter(rig);w.prepare();task=fake_api[-1]
-    args,ch=task.ci_channels.calls[0]
-    assert args['counter']=='cDAQ1Mod3/ctr0'
-    assert ch.ci_count_edges_term=='/cDAQ1Mod3/PFI0'
-    assert args['initial_count']==0 and args['count_direction']=='COUNT_UP'
-    assert task.in_stream.auto_start is False
+    w=NICounter(rig);w.prepare()
+    assert len(fake_api)==3
+    expected=[('water_flow_in','cDAQ1Mod3/ctr0','/cDAQ1Mod3/PFI0'),
+              ('water_flow_out','cDAQ1Mod3/ctr1','/cDAQ1Mod3/PFI1'),
+              ('impeller_rpm','cDAQ1Mod3/ctr2','/cDAQ1Mod3/PFI2')]
+    for task,(exp_name,exp_ctr,exp_term) in zip(fake_api,expected):
+        args,ch=task.ci_channels.calls[0]
+        assert args['name_to_assign_to_channel']==exp_name
+        assert args['counter']==exp_ctr
+        assert ch.ci_count_edges_term==exp_term
+        assert args['initial_count']==0 and args['count_direction']=='COUNT_UP'
+        assert task.in_stream.auto_start is False
     w.close()
+    assert all(t.closed for t in fake_api)
 
 def make_inventory(rig):
     hw=rig['hardware'];devices=[]
@@ -92,8 +99,8 @@ def make_inventory(rig):
                             ai_physical_chans=[],ci_physical_chans=[],terminals=[]))
     devices[1]['ai_physical_chans']=[x['physical'] for x in rig['rtd']['channels']]
     devices[2]['ai_physical_chans']=[x['physical'] for x in rig['analog']['channels']]
-    devices[3]['ci_physical_chans']=[hw['counter_channel']]
-    devices[3]['terminals']=[hw['pulse_terminal']]
+    devices[3]['ci_physical_chans']=[x['physical'] for x in rig['counter']['channels']]
+    devices[3]['terminals']=[x['pulse_terminal'] for x in rig['counter']['channels']]
     return {'devices':devices}
 
 def test_inventory_accepts_configured_resources(rig):verify_inventory(rig,make_inventory(rig))

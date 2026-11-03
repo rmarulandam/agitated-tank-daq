@@ -10,14 +10,16 @@ import yaml
 class ConfigError(ValueError):
     """Invalid or insufficiently confirmed experiment configuration."""
 
-# Fail closed on misspelled top-level sections. Each signal's identity is fixed.
+# Fail closed on misspelled top-level sections.
 ROOT_KEYS = {"schema_version", "simulation_only", "run", "hardware", "checks",
              "sampling", "rtd", "analog", "counter", "storage", "external"}
-DEFAULT_RTD_NAMES = ("t_air_in_c", "t_air_out_c", "t_water_upper_c", "t_water_bulk_c")
+DEFAULT_RTD_NAMES = ("t_water_in_c", "t_water_out_c", "t_water_level_quarter_c", "t_water_level_three_quarters_c")
 RTD_NAMES = DEFAULT_RTD_NAMES
-DEFAULT_ANALOG_NAMES = ("t_ambient_c", "rh_ambient_pct", "p_atm_pa", "p_water_in_pa",
-                "p_water_out_pa", "dp_air_duct_pa", "v_air_m_s")
+DEFAULT_ANALOG_NAMES = ("t_air_in_c", "t_air_out_c", "p_atm_pa", "rh_ambient_pct",
+                        "dp_air_duct_pa", "level_water_m", "power_motor_w")
 ANALOG_NAMES = DEFAULT_ANALOG_NAMES
+DEFAULT_COUNTER_NAMES = ("water_flow_in", "water_flow_out", "impeller_rpm")
+COUNTER_NAMES = DEFAULT_COUNTER_NAMES
 CHECK_NAMES = ("wiring_verified", "sensor_supplies_verified", "rtd_curve_verified",
                "hall_logic_verified")
 
@@ -61,10 +63,6 @@ def validate(cfg: dict[str, Any], *, backend: str = "sim", raw_only: bool = Fals
                 raise ConfigError(f"hardware.{key}: invalid DAQmx device name")
         if len({hw[k] for k in ("rtd_module", "analog_module", "counter_module")}) != 3:
             raise ConfigError("RTD, analog and counter modules must be distinct")
-        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*/ctr[0-9]+", hw["counter_channel"]):
-            raise ConfigError("Invalid counter_channel; use a name from 'tankdaq devices'")
-        if not re.fullmatch(r"/[A-Za-z][A-Za-z0-9_]*/PFI[0-9]+", hw["pulse_terminal"]):
-            raise ConfigError("pulse_terminal must be an explicit /device/PFIx route")
         sampling = cfg["sampling"]
         for key in ("rtd_hz", "analog_hz", "counter_poll_hz", "flow_window_s",
                     "buffer_seconds", "idle_timeout_s"):
@@ -97,24 +95,14 @@ def validate(cfg: dict[str, Any], *, backend: str = "sim", raw_only: bool = Fals
             name = ch.get("name")
             if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,49}", name):
                 raise ConfigError(f"rtd[{i}].name: use 1-50 ASCII letters, digits or '_', starting with a letter")
-            raw_name = ch.get("raw_name")
-            if not isinstance(raw_name, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,49}", raw_name):
-                raise ConfigError(f"{name}.raw_name: use 1-50 ASCII letters, digits or '_', starting with a letter")
-            if not raw_name.endswith("_raw_c"):
-                raise ConfigError(f"{name}.raw_name must end in _raw_c")
             if ch["physical"] != f"{hw['rtd_module']}/ai{i}":
                 raise ConfigError("RTD physical channels must be ai0 through ai3 on rtd_module")
             for key in ("gain", "offset_c"):
                 number(ch[key], f"{ch['name']}.{key}")
-
-
         for i, ch in enumerate(analog):
             name = ch.get("name")
             if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,49}", name):
                 raise ConfigError(f"analog[{i}].name: use 1-50 ASCII letters, digits or '_', starting with a letter")
-            raw_name = ch.get("raw_name")
-            if not isinstance(raw_name, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,49}", raw_name):
-                raise ConfigError(f"{name}.raw_name: use 1-50 ASCII letters, digits or '_', starting with a letter")
             if ch["physical"] != f"{hw['analog_module']}/ai{i}" or ch["negative_input"] != f"ai{i+8}":
                 raise ConfigError("NI-9204 differential pairs must be ai0/ai8 through ai6/ai14")
             lo, hi = pair(ch["daq_range_v"], f"{ch['name']}.daq_range_v")
@@ -144,23 +132,49 @@ def validate(cfg: dict[str, Any], *, backend: str = "sim", raw_only: bool = Fals
                     v0, v1 = s["signal_range_v"]
                 if v0 < lo or v1 > hi:
                     raise ConfigError(f"{ch['name']}: transmitter range exceeds DAQ range")
-        all_names = [c["name"] for c in rtd + analog] + [c["raw_name"] for c in rtd + analog]
-        if len(all_names) != len(set(all_names)):
-            raise ConfigError("Engineering names and raw names must be unique")
         cs = cfg["counter"]
-        number(cs["hz_per_l_min"], "counter.hz_per_l_min", positive=True)
-        pair(cs["valid_flow_l_min"], "counter.valid_flow_l_min")
-        _boolean(cs["calibration_confirmed"], "counter.calibration_confirmed")
-        if cs["calibration_confirmed"] and not cs["calibration_id"]:
-            raise ConfigError("Counter calibration_id is required when confirmed")
         if cs["edge"] not in {"RISING", "FALLING"}:
             raise ConfigError("counter.edge must be RISING or FALLING")
         if cs["bits"] != 32:
             raise ConfigError("This chassis design uses a 32-bit counter")
+        counters = cs["channels"]
+        if len(counters) != 3:
+            raise ConfigError(f"Three counter channels are required, got {len(counters)}")
+        for i, ch in enumerate(counters):
+            name = ch.get("name")
+            if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,49}", name):
+                raise ConfigError(f"counter[{i}].name: use 1-50 ASCII letters, digits or '_', starting with a letter")
+            if not isinstance(ch.get("unit"), str) or not ch["unit"].strip():
+                raise ConfigError(f"counter[{i}].unit must be a non-empty string")
+            if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*/ctr[0-9]+", ch["physical"]):
+                raise ConfigError("Invalid counter physical channel; use a name from 'tankdaq devices'")
+            if not re.fullmatch(r"/[A-Za-z][A-Za-z0-9_]*/PFI[0-9]+", ch["pulse_terminal"]):
+                raise ConfigError("pulse_terminal must be an explicit /device/PFIx route")
+            number(ch["hz_per_unit"], f"{name}.hz_per_unit", positive=True)
+            pair(ch["valid_range"], f"{name}.valid_range")
+            _boolean(ch["calibration_confirmed"], f"{name}.calibration_confirmed")
+            if ch["calibration_confirmed"] and not ch["calibration_id"]:
+                raise ConfigError(f"{name}: counter calibration_id is required when confirmed")
+        if len({c["physical"] for c in counters}) != len(counters):
+            raise ConfigError("Counter physical channels must be unique")
+        if len({c["pulse_terminal"] for c in counters}) != len(counters):
+            raise ConfigError("Counter pulse_terminal routes must be unique")
+        all_names = [c["name"] for c in rtd + analog + counters]
+        if len(all_names) != len(set(all_names)):
+            raise ConfigError("Channel names must be unique")
+        st = cfg["storage"]
         for key in ("tdms",):
-            _boolean(cfg["storage"][key], "storage." + key)
-        number(cfg["storage"]["min_free_mb"], "storage.min_free_mb", positive=True)
-        number(cfg["storage"]["commit_interval_s"], "storage.commit_interval_s", positive=True)
+            _boolean(st[key], "storage." + key)
+        for key in ("auto_export_csv", "export_csv", "auto_export_parquet", "export_parquet"):
+            if key in st:
+                _boolean(st[key], "storage." + key)
+        number(st["min_free_mb"], "storage.min_free_mb", positive=True)
+        number(st["commit_interval_s"], "storage.commit_interval_s", positive=True)
+        if st.get("auto_export_parquet") or st.get("export_parquet"):
+            try:
+                import pyarrow  # noqa: F401
+            except ImportError as exc:
+                raise ConfigError("Parquet export requires: python -m pip install '.[parquet]'") from exc
         ext = cfg["external"]
         if ext["impeller_rpm"] is not None:
             if number(ext["impeller_rpm"], "external.impeller_rpm") < 0 or not ext["method"]:
@@ -177,8 +191,7 @@ def validate(cfg: dict[str, Any], *, backend: str = "sim", raw_only: bool = Fals
                 raise ConfigError("Complete the electrical checks, then set true: " + ", ".join(missing))
             if not raw_only:
                 pending = [c["name"] for c in analog if not c["scale"]["confirmed"]]
-                if not cs["calibration_confirmed"]:
-                    pending.append("q_water_l_min")
+                pending.extend(c["name"] for c in counters if not c["calibration_confirmed"])
                 if pending:
                     raise ConfigError("Unconfirmed scales: " + ", ".join(pending) + ". Use --raw-only for commissioning")
     except (KeyError, TypeError, AttributeError) as exc:

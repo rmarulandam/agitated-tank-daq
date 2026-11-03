@@ -25,10 +25,15 @@ def test_run_data_integrity(completed):
     info=inspect_run(completed)
     assert info['integrity']=='ok'
     assert len(info['channel_samples'])==11
+    assert len(info['counter_channels'])==3
+    assert {c['channel'] for c in info['counter_channels']}=={'water_flow_in','water_flow_out','impeller_rpm'}
     assert info['counter_polls']>=1
     for ch in info['channel_samples']:
         assert ch['first_index']==0
         assert ch['last_index']==ch['n']-1
+    for cch in info['counter_channels']:
+        assert cch['first_index']==0
+        assert cch['last_index']==cch['n']-1
     assert not (completed/'RUNNING').exists()
     assert (completed/'COMPLETED').exists()
     meta=json.loads((completed/'metadata.json').read_text())
@@ -41,6 +46,8 @@ def test_csv_export_preserves_raw_and_quality(completed):
     assert rows and all('SIMULATED' in x['quality'] for x in rows)
     assert all(x['raw_value'] for x in rows)
     assert all(x['simulated']=='1' for x in rows)
+    with (result/'counter.csv').open() as f:crows=list(csv.DictReader(f))
+    assert crows and {r['channel'] for r in crows}=={'water_flow_in','water_flow_out','impeller_rpm'}
 
 def test_notes(completed):
     add_note(completed,'Independent RPM calculation recorded separately')
@@ -49,7 +56,9 @@ def test_notes(completed):
 
 def test_monitor_once(completed,capsys):
     watch(completed,once=True)
-    assert 't_air_in_c' in capsys.readouterr().out
+    out=capsys.readouterr().out
+    for expected in ('t_water_in_c','t_air_in_c','level_water_m','power_motor_w','water_flow_in','water_flow_out','impeller_rpm'):
+        assert expected in out
 
 def test_export_refuses_running(completed):
     (completed/'RUNNING').touch()
@@ -75,6 +84,8 @@ def test_raw_only_run(tmp_path,demo,demo_path):
     with sqlite3.connect(folder/'measurements.sqlite') as db:
         assert db.execute("SELECT count(*) FROM samples WHERE stream='analog' AND value IS NOT NULL").fetchone()[0]==0
         assert db.execute("SELECT count(*) FROM samples WHERE stream='analog' AND raw_value IS NOT NULL").fetchone()[0]>0
+        assert db.execute("SELECT count(*) FROM counter WHERE value IS NOT NULL").fetchone()[0]==0
+        assert db.execute("SELECT count(*) FROM counter WHERE count_raw IS NOT NULL").fetchone()[0]>0
 
 def test_sample_index_gaps_rejected(tmp_path,demo):
     store=RunStore(tmp_path,demo,Clock.now(),'sim',False)
@@ -112,13 +123,11 @@ def test_optional_parquet_export(completed):
     tab=pq.read_table(output/'samples.parquet')
     assert tab.num_rows>0 and 'raw_value' in tab.column_names
 
-
 def test_run_with_custom_channel_names(tmp_path, demo):
     import yaml
     demo["rtd"]["channels"][0]["name"] = "t_custom_top_c"
-    demo["rtd"]["channels"][0]["raw_name"] = "t_custom_top_raw_c"
     demo["analog"]["channels"][0]["name"] = "p_custom_baro_pa"
-    demo["analog"]["channels"][0]["raw_name"] = "v_custom_baro_v"
+    demo["counter"]["channels"][0]["name"] = "q_custom_in_l_min"
     demo["sampling"]["rtd_hz"] = 5.0
     cfg_path = tmp_path / "custom_demo.yaml"
     cfg_path.write_text(yaml.safe_dump(demo), encoding="utf-8")
@@ -130,9 +139,65 @@ def test_run_with_custom_channel_names(tmp_path, demo):
     channels_found = {ch["channel"] for ch in info["channel_samples"]}
     assert "t_custom_top_c" in channels_found
     assert "p_custom_baro_pa" in channels_found
+    counter_found = {ch["channel"] for ch in info["counter_channels"]}
+    assert "q_custom_in_l_min" in counter_found
     export_dir = export_run(folder, "csv")
     with (export_dir / "samples.csv").open(encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
     exported_channels = {r["channel"] for r in rows}
     assert "t_custom_top_c" in exported_channels
     assert "p_custom_baro_pa" in exported_channels
+
+
+def test_auto_export_csv_and_parquet(tmp_path, demo):
+    import yaml
+    demo["sampling"]["rtd_hz"] = 5.0
+    demo["storage"]["auto_export_csv"] = True
+    demo["storage"]["auto_export_parquet"] = True
+    cfg_path = tmp_path / "auto_export_demo.yaml"
+    cfg_path.write_text(yaml.safe_dump(demo), encoding="utf-8")
+    folder, status = run(demo, cfg_path, tmp_path / "runs", backend="sim", duration_s=0.5,
+                         raw_only=False, acknowledge_wiring=False, quiet=True)
+    assert status == "completed"
+    csv_dirs = list(folder.glob("export_csv_*"))
+    assert len(csv_dirs) == 1
+    assert (csv_dirs[0] / "samples.csv").exists()
+    assert (csv_dirs[0] / "counter.csv").exists()
+    assert (csv_dirs[0] / "export_manifest.json").exists()
+
+    parquet_dirs = list(folder.glob("export_parquet_*"))
+    assert len(parquet_dirs) == 1
+    assert (parquet_dirs[0] / "samples.parquet").exists()
+    assert (parquet_dirs[0] / "export_manifest.json").exists()
+
+def test_auto_export_disabled_by_default(tmp_path, demo):
+    import yaml
+    demo["sampling"]["rtd_hz"] = 5.0
+    demo["storage"]["auto_export_csv"] = False
+    demo["storage"]["auto_export_parquet"] = False
+    cfg_path = tmp_path / "disabled_export_demo.yaml"
+    cfg_path.write_text(yaml.safe_dump(demo), encoding="utf-8")
+    folder, status = run(demo, cfg_path, tmp_path / "runs", backend="sim", duration_s=0.5,
+                         raw_only=False, acknowledge_wiring=False, quiet=True)
+    assert status == "completed"
+    assert len(list(folder.glob("export_*"))) == 0
+
+def test_auto_export_failure_is_non_fatal(tmp_path, demo, monkeypatch):
+    import yaml
+    import tankdaq.data_tools
+    demo["sampling"]["rtd_hz"] = 5.0
+    demo["storage"]["auto_export_csv"] = True
+    cfg_path = tmp_path / "failing_export.yaml"
+    cfg_path.write_text(yaml.safe_dump(demo), encoding="utf-8")
+
+    def mock_export(folder, fmt, output=None):
+        raise RuntimeError("Simulated export I/O failure")
+
+    monkeypatch.setattr(tankdaq.data_tools, "export_run", mock_export)
+    folder, status = run(demo, cfg_path, tmp_path / "runs", backend="sim", duration_s=0.5,
+                         raw_only=False, acknowledge_wiring=False, quiet=True)
+    assert status == "completed"
+    assert (folder / "measurements.sqlite").exists()
+    assert (folder / "COMPLETED").exists()
+    log_content = (folder / "acquisition.log").read_text(encoding="utf-8")
+    assert "Auto-export CSV failed" in log_content

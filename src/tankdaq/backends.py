@@ -67,11 +67,11 @@ class SimAnalog(Worker):
             n = min(self.cfg["sampling"]["max_block_samples"], max(1, int((clock.elapsed()-t0)*rate)-index))
             times = np.arange(index, index+n)/rate
             if self.name == "rtd":
-                base = np.array([29.0, 25.0, 21.3, 21.0])[:, None]
+                base = np.array([21.0, 22.5, 21.4, 22.1])[:, None]
                 values = base + 0.2*np.sin(times/15)[None, :] + self.rng.normal(0, .015, (4,n))
             else:
                 # Synthetic VOLTAGES: no fictitious sensor specifications are used here.
-                base = np.array([2.92, 3.6, 3.47, 1.0, .85, 1.6, 2.6])[:, None]
+                base = np.array([2.92, 2.75, 3.47, 3.6, 1.6, 5.5, 4.2])[:, None]
                 values = base + .012*np.sin(times/7)[None, :] + self.rng.normal(0, .001, (7,n))
             self.publish(out, AnalogBlock(self.name,index,rate,t0,clock.elapsed(),values,True))
             index += n
@@ -85,18 +85,25 @@ class SimCounter(Worker):
     def produce(self, clock: Clock, out: queue.Queue, stop: threading.Event) -> None:
         self.outcome.started = True
         t0 = clock.elapsed()
-        self.outcome.metadata = dict(simulated=True, nominal_simulated_frequency_hz=15.0,
-                                     timing="host_poll_midpoint", t0_est_s=t0)
+        freqs = (15.0, 15.0, 120.0)
+        channels = self.cfg["counter"]["channels"]
+        self.outcome.metadata = dict(
+            simulated=True,
+            nominal_simulated_frequencies_hz={ch["name"]: f for ch, f in zip(channels, freqs)},
+            timing="host_poll_midpoint",
+            t0_est_s=t0,
+        )
         self.publish(out, StreamInfo("counter", self.outcome.metadata))
         index = 0
         while not stop.is_set():
             t = clock.elapsed()
-            count = int(max(0.,t-t0)*15.0) % (1<<32)
-            self.publish(out, CounterPoint(index,t,0.,count,True))
+            for ch, freq in zip(channels, freqs):
+                count = int(max(0., t-t0)*freq) % (1<<32)
+                self.publish(out, CounterPoint(ch["name"], index, t, 0., count, True))
             index += 1
             self.outcome.samples_per_channel = index
             due = t0+index/self.cfg["sampling"]["counter_poll_hz"]
-            if stop.wait(max(0,due-clock.elapsed())):
+            if stop.wait(max(0, due-clock.elapsed())):
                 break
 
 def simulation_workers(cfg: dict[str, Any]) -> list[Worker]:

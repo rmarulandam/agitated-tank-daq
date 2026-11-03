@@ -1,43 +1,175 @@
-# Hardware commissioning checklist
+# Hardware Commissioning Guide & Checklist
 
-This is an acquisition-software checklist, not a replacement electrical installation design. Only a qualified person responsible for the laboratory setup should energize the rig. The software cannot verify physical connector pin numbering, instrument common mode, protective earth, branch protection or isolation.
+This guide provides the complete physical installation, electrical checkout, scaling formulas, and operational acceptance procedures for the agitated-tank DAQ rig before collecting research data.
 
-## Before acquisition
+> [!WARNING]
+> **Safety First:** This is an acquisition-only software checklist. It does not replace proper laboratory electrical safety and engineering controls. Only qualified laboratory personnel should energize the rig.
 
-Keep motors and other actuators independently disabled during signal checkout. Verify the actual modules are NI-9217, NI-9204 and the added NI-9411 in a cDAQ-9173. Confirm that the NI-9411 is actually installed: it was an addition to the original two-module quotation. Install supported NI-DAQmx drivers and confirm device names/resources with NI MAX and `tankdaq devices`. Close test panels before running the application.
+---
 
-Check the four sensor-side RTD lead pairs and the installed standard curve. The template selects NI PT_3851, four wires, 100 ohms and 1 mA internal excitation. The quotation gives a rounded alpha; use the delivered sensor documentation/certificate to settle the curve. Do not apply 24 V to RTD terminals. The `rtd_curve_verified` check is a physical/documentary acknowledgement, not a software identification procedure.
+## Phase 0: Software & Driver Prerequisites
 
-Confirm 24 V and 5 V power distribution, sensor return/common arrangements and protective bonding independently of signal cables. Confirm each NI-9204 differential pair, its common-mode voltage relative to COM and polarity. The input range is not a substitute for verifying common-mode limits. Measure and record R1-R5; do not confuse nominal resistor tolerance with calibrated shunt uncertainty. Verify current-loop compliance with the shunt burden. This software reads voltage across those shunts, never commands current.
+Complete these steps on the host PC before connecting field instrumentation:
 
-The Changor dual-loop wiring remains provisional until confirmed on the actual unit. Confirm whether each transmitter is active-output or two-wire loop-powered. Confirm that the atmospheric-pressure unit is actually the 4-20 mA variant. A delivered RS485-only transmitter requires different hardware/software integration; this release has no Modbus backend. The water-pressure voltage variant, pinout, supply and gauge/absolute reference must be established. Never use the provisional 0.5-4.5 V curve for a 0-5 V unit.
+- [ ] **Install NI-DAQmx Driver:** Download and install the official NI-DAQmx driver suite for Windows (via NI Package Manager).
+  > [!IMPORTANT]
+  > The Python package (`pip install nidaqmx`) is merely an API wrapper. The official NI-DAQmx driver suite must be installed separately on Windows to provide the required kernel drivers, hardware services, and runtime libraries (`nicaiu.dll`).
+- [ ] **Close Conflicting Software:** Close NI MAX test panels, LabVIEW VIs, and any other process holding hardware handles before starting acquisition.
+- [ ] **Prepare Python Environment:** Ensure Python (3.11–3.13) is installed with NI dependencies:
+  ```powershell
+  py -3.12 -m venv .venv
+  .\.venv\Scripts\python.exe -m pip install -e ".[ni,test]"
+  ```
+- [ ] **Verify Chassis & Module Detection (NI MAX):** Connect the cDAQ-9173 via USB, open NI MAX, and verify all modules appear under **Devices and Interfaces**:
+  - Slot 1: NI-9217 (4-channel RTD)
+  - Slot 2: NI-9204 (7 differential analog voltage channels)
+  - Slot 3: NI-9411 or NI-9401 (3 digital counter inputs)
+- [ ] **Generate Python Hardware Inventory:**
+  ```powershell
+  .\.venv\Scripts\python.exe -m tankdaq devices --output devices.json
+  ```
+  *(Note: NI MAX simulated devices are strictly refused by the hardware backend; use `--backend sim` for synthetic demonstrations.)*
+- [ ] **Create Site Configuration File:**
+  ```powershell
+  Copy-Item configs\rig.yaml configs\rig.local.yaml
+  ```
+  > [!NOTE]
+  > Do not edit `demo.yaml` into a hardware configuration: `demo.yaml` has `simulation_only: true` and the hardware backend will refuse it. Local files named `configs/*.local.yaml` and `devices.json` are git-ignored, preventing site-specific calibrations and hardware serial numbers from being committed inadvertently. A complete reference showing how a calibrated local file should look is provided in [`configs/pilot.demo.yaml`](../configs/pilot.demo.yaml).
+- [ ] **Align Resource Names:** Verify device names in `configs/rig.local.yaml` match `devices.json` exactly (e.g. `cDAQ1Mod1`, `cDAQ1Mod2`, `cDAQ1Mod3/ctr0` through `ctr2` or `cDAQ1/ctr0` through `ctr2`, and `/cDAQ1Mod3/PFI0` through `PFI2`). If your chassis enumerates counters under the chassis rather than the module, update each channel's `physical` field under `counter.channels` accordingly.
 
-Confirm differential-air-pressure range, sign and pressure-port assignment. Confirm the selected airflow transmitter's actual model, configured velocity range and output, and the representativeness of its duct installation. The software deliberately does not pick an AliExpress range or claim that an unspecified sensor measures mean cross-sectional velocity.
+---
 
-For the Hall sensor, confirm output topology, logic level, pull-up requirements and NI-9411 single-ended/differential wiring from the actual manuals. The flow-task code routes the configured PFI input to a counter; it does not configure a missing external pull-up. Confirm `devices.json` enumerates the counter resource and PFI terminal you intend to use.
+## Phase 1: Physical Wiring & Electrical Verification
 
-## Signal injection and quiet tests
+Keep agitator motor, valves, and heater **physically locked out and unpowered** during electrical checkout.
 
-With field equipment appropriately disconnected, use a suitable calibrator and reference meter to check each voltage/current input. Verify the raw voltage near the intended minimum, midpoint and maximum. For each measured 250-ohm shunt, a nominal 4/12/20 mA input should produce approximately 1/3/5 V; use measured resistance when assessing the expected value. Record observed deviations and instrument calibration information.
+### 1.1 Power Supplies & Common Ground (`sensor_supplies_verified`)
+- [ ] **Power Distribution:** Confirm 24 V DC and 5 V DC sensor power rails are regulated and within specification.
+- [ ] **Isolation & Bonding:** Confirm protective earth bonding and instrument signal returns (COM) are wired according to the lab electrical design.
+- [ ] **Common-Mode Limits:** Verify that differential voltages and common-mode voltages relative to chassis COM do not exceed the NI-9204 ±10 V limit.
 
-For RTDs, use a suitable resistance standard or known-temperature comparison appropriate for four-wire measurements. Verify channel labels and physical locations before relying on inlet/outlet differences. Check expected ambient readings without treating agreement between sensors as a traceable calibration.
+### 1.2 RTD Module Wiring (`rtd_curve_verified`)
+- [ ] **Lead Configuration:** Wire all four PT100 water temperature probes (`t_water_in_c`, `t_water_out_c`, `t_water_level_quarter_c`, `t_water_level_three_quarters_c`) using 4-wire connections on `cDAQ1Mod1/ai0` through `ai3`.
+- [ ] **Overvoltage Protection:** The NI-9217 provides internal 1 mA excitation.
+- [ ] **Curve Selection:** Confirm sensor alpha against the manufacturer's calibration certificate (NI standard curve `PT_3851` with $R_0 = 100\,\Omega$ is selected in the template).
+- [ ] **Acquisition Range:** Note that the temperature interval in the configuration is a requested acquisition interval.
 
-Use a compatible pulse source, safely conditioned for the NI-9411, to check increasing counts and the configured coefficient. Check a stopped pulse train: frequency must eventually become zero after the rolling window clears, with a no-pulse ambiguity flag. Check pulse rates over the intended operating range. Confirm count polling remains responsive when no pulses arrive.
+### 1.3 Differential Voltage & Shunt Resistors (`wiring_verified`)
+- [ ] **Differential Pairs:** Wire analog inputs to the NI-9204 as differential pairs (`ai0/ai8` through `ai6/ai14`). Unused `ai7/ai15` must remain disconnected.
+- [ ] **Measure Shunt Resistors ($R_1$–$R_5$):** Measure each 250 $\Omega$ precision current-loop shunt resistor (`ai0` through `ai4`) with a calibrated bench multimeter. Record the exact measured resistance under `shunt_ohm` in `configs/rig.local.yaml` (do not rely on nominal 250.0 $\Omega$ tolerance).
+- [ ] **Current-Loop Burden Compliance:** Verify loop power supplies provide sufficient compliance voltage across the 250 $\Omega$ burden and sensor drops. (The software reads voltage across these shunts).
+- [ ] **Transmitter Output Verification:**
+  - **Air In / Out Temperature Transmitters (`ai0`, `ai1`):** Confirm 4–20 mA current loop wiring across shunts $R_1$ and $R_2$ and verify configured temperature range endpoints.
+  - **Barometric Pressure Transmitter (`ai2`):** Confirm the unit is the 4–20 mA analog variant across shunt $R_3$. (A delivered RS485-only transmitter requires separate hardware/software integration).
+  - **Ambient Relative Humidity Transmitter (`ai3`):** Confirm 4–20 mA current loop wiring across shunt $R_4$ and verify RH scaling endpoints.
+  - **Air Differential Pressure Transmitter (`ai4`):** Confirm differential pressure ports/polarity and 4–20 mA loop wiring across shunt $R_5$.
+  - **Tank Water Level & Motor Electrical Power (`ai5`, `ai6`):** Confirm 0–10 V linear voltage outputs and verify level (`m`) and power (`W`) scaling endpoints.
 
-Only after the physical checks are complete should the four `checks` fields be marked true. Start with `--raw-only` for at least 60 seconds. Inspect all eleven analog/RTD channel records plus the counter. The seven transmitter engineering values and water-flow engineering value should remain null in raw-only mode; DAQmx RTD temperatures and raw voltages/counts remain available.
+### 1.4 Digital Counters: Water Flow & Impeller RPM (`hall_logic_verified`)
+- [ ] **Module Support:** Verify the digital module is either an NI-9411 or NI-9401.
+- [ ] **Pulse Conditioning:** Confirm pulse sensor output topologies (5 V TTL vs. open-collector) for inlet flow (`water_flow_in`), outlet flow (`water_flow_out`), and axis impeller tachometer (`impeller_rpm`). Ensure required external pull-up resistors are installed if using open-collector sensors.
+- [ ] **Terminal Routes:** Verify physical pulse wiring connects to the configured terminal routes (`/cDAQ1Mod3/PFI0` for `ctr0`, `/cDAQ1Mod3/PFI1` for `ctr1`, and `/cDAQ1Mod3/PFI2` for `ctr2`).
 
-## Scale establishment
+---
 
-Fill exact engineering endpoints and voltage/current endpoints from delivered sensors and calibration. Set `confirmed` only after the intended transfer function has been established; record its source under `calibration_id`. For current loops, enter actual shunt resistance. For water pressure, settle both voltage endpoints and pressure reference. Use Pa consistently for pressure outputs. Confirm the Hall Hz-per-(L/min) coefficient rather than silently relying on the quotation for a different model.
+## Phase 2: Bench Signal Injection & Quiet Checks
 
-Individual RTD correction is `gain * DAQmx_temperature + offset_c`. Default gain 1/offset 0 means no individual correction, not proof of calibrated probes. The software does not estimate coefficients or uncertainty from calibration data.
+Before connecting installed plant transmitters, test each channel with reference sources where available:
 
-## Powered-rig checks and acceptance
+- [ ] **Voltage & Current Loops:** Inject known test signals (e.g. 4 mA, 12 mA, 20 mA across the measured 250 $\Omega$ shunts to observe ~1 V, 3 V, 5 V; and 0–10 V on `ai5`/`ai6`). Record deviations.
+- [ ] **RTDs:** Connect a precision decade box or reference RTD; confirm stable, plausible temperature readings in degrees Celsius.
+- [ ] **Pulse Counters:** Inject a known pulse frequency (e.g. 10–50 Hz TTL) into each counter channel; confirm counts increment monotonically and frequency calculation matches the input.
+- [ ] **Signal Loss Check:** Disconnect pulse signals; verify frequency decays to zero after the rolling window clears and quality flags `NO_PULSES_FLOW_OR_SIGNAL_LOSS`.
 
-Run with motors off, then with the actual fan/impeller operating under independent laboratory controls. Compare raw signal noise and offsets. A software lowpass or long averaging window is not a remedy for unsafe/common-mode wiring. Verify every cable label, pressure tap and logged channel against physical changes one at a time.
+---
 
-Exercise Ctrl+C and timed termination; verify all tasks release and the next run starts. Simulate signal loss using a safe procedure; verify faults/quality flags and retained raw data. A program shutdown does not stop the motor or pump. Check the laboratory emergency stop independently.
+## Phase 3: Raw Acquisition Commissioning Run
 
-For a representative-duration pilot, confirm no missing required streams, contiguous indices per stream, expected actual rates, adequate free disk, final status and SQLite integrity. Check `metadata.json`, events, TDMS files and CSV export. Verify how external RPM timestamps align. Archive the config, sensor/DAQ identifiers, calibration records and pilot results.
+Once physical checks are complete, mark the four gates as `true` in `configs/rig.local.yaml`:
 
-This release has not been commissioned on the physical rig. Passing the included software tests is not a substitute for this acceptance process.
+```yaml
+checks:
+  wiring_verified: true
+  sensor_supplies_verified: true
+  rtd_curve_verified: true
+  hall_logic_verified: true
+```
+
+- [ ] **Validate Configuration:**
+  ```powershell
+  .\.venv\Scripts\python.exe -m tankdaq validate --config configs\rig.local.yaml --backend ni --raw-only --acknowledge-wiring
+  ```
+  *(Note: `validate` checks configuration syntax only; it does not open hardware).*
+- [ ] **Execute 60-Second Raw Test Run:**
+  ```powershell
+  .\.venv\Scripts\python.exe -m tankdaq run --config configs\rig.local.yaml --backend ni --raw-only --acknowledge-wiring --duration 60
+  ```
+  *(Note: `run` verifies hardware inventory and reserves/commits tasks. Preparing an RTD task may establish excitation. No hardware acquisition starts without explicit `--acknowledge-wiring`.)*
+- [ ] **Inspect Output:**
+  ```powershell
+  $run = (Get-ChildItem .\runs -Directory | Sort-Object LastWriteTime | Select-Object -Last 1).FullName
+  .\.venv\Scripts\python.exe -m tankdaq inspect "$run"
+  ```
+- [ ] **Verify Raw Data Behavior:**
+  - All seven analog voltages (V) and all three counter pulse counts/frequencies are logged.
+  - Transmitter engineering values and counter engineering values (`L/min`, `rpm`) remain `null` (raw-only mode prevents applying unverified equations).
+  - RTD temperatures remain available because the NI-9217 returns DAQmx-linearized degrees Celsius.
+
+---
+
+## Phase 4: Establish & Confirm Engineering Scales
+
+Once raw signals are validated, establish each sensor's mathematical transfer function in `configs/rig.local.yaml`.
+
+### 4.1 Scaling Mathematics
+
+- **Current-Loop Channels (4–20 mA over measured shunt $R$):**
+  $$I_{\text{mA}} = 1000 \cdot \frac{V_{\text{measured}}}{R_{\text{measured}}}$$
+  $$Y = Y_{\min} + \frac{I_{\text{mA}} - I_{\min}}{I_{\max} - I_{\min}} \cdot (Y_{\max} - Y_{\min})$$
+  $$Y_{\text{corrected}} = Y \cdot \text{post\_gain} + \text{post\_offset}$$
+
+- **Voltage-Linear Channels (e.g. 0–10 V):**
+  $$Y = Y_{\min} + \frac{V_{\text{measured}} - V_{\min}}{V_{\max} - V_{\min}} \cdot (Y_{\max} - Y_{\min})$$
+  $$Y_{\text{corrected}} = Y \cdot \text{post\_gain} + \text{post\_offset}$$
+
+- **RTD Probe Corrections:**
+  $$T_{\text{corrected}} = T_{\text{linearized}} \cdot \text{gain} + \text{offset\_c}$$
+  *(Default gain 1.0 and offset 0.0 apply no probe-specific correction).*
+
+- **Counter Pulse Rate Calculation (Flow & Impeller RPM):**
+  $$Y = \frac{f_{\text{Hz}}}{\text{hz\_per\_unit}}$$
+  *(For Hall flowmeters: $f_{\text{Hz}} = 0.5 \cdot Q_{\text{L/min}}$, where 1 count over a 10-second window gives 0.2 L/min counting resolution. For impeller RPM: $\text{hz\_per\_unit} = \text{pulses\_per\_rev} / 60$).*
+
+> [!NOTE]
+> **No Clipping:** Values are deliberately never clipped at configured endpoints, preserving overrange evidence. Out-of-range signals receive quality flags (`AT_DAQ_LIMIT`, `OUTSIDE_NOMINAL_SIGNAL`, `OUTSIDE_SENSOR_FLOW_RANGE`).
+
+### 4.2 Confirmation Checklist
+- [ ] **Measured Shunt Resistance:** Enter exact measured ohms under `shunt_ohm` for each current loop (`R1`–`R5`).
+- [ ] **Limits:** Enter verified minimum/maximum physical endpoints ($Y_{\min}$, $Y_{\max}$) using standard units (`degC`, `Pa`, `percent_RH`, `m`, `W`).
+- [ ] **Counter Calibrations:** Confirm the actual `hz_per_unit` coefficients for `water_flow_in`, `water_flow_out`, and `impeller_rpm`.
+- [ ] **Confirm Scales:** Set `scale.confirmed: true` on all 7 analog channels and `calibration_confirmed: true` on all 3 counter channels.
+- [ ] **Record Provenance:** Enter a meaningful `calibration_id` or datasheet reference for each confirmed channel. In this application, *confirmed* means the transfer function is established.
+- [ ] **Store Calibration Certificates:** Store digital certificates, factory inspection sheets, or measurement logs in [`docs/calibrations/`](calibrations/README.md) and record their file path and metadata in [`docs/calibrations/CAL-INDEX.csv`](calibrations/CAL-INDEX.csv). Binary assets (PDFs, scans, images) in `docs/calibrations/` are tracked via **Git Large File Storage (Git LFS)** as defined in [`.gitattributes`](../.gitattributes). Run `git lfs install` before adding large files.
+
+---
+
+## Phase 5: Powered-Rig Pilot & Operational Acceptance
+
+Once all scales are confirmed (refer to [`configs/pilot.demo.yaml`](../configs/pilot.demo.yaml) as an example of a fully confirmed and calibrated pilot configuration), execute calibrated acquisition:
+
+```powershell
+.\.venv\Scripts\python.exe -m tankdaq run --config configs\rig.local.yaml --backend ni --acknowledge-wiring --duration 3600
+```
+*(Omit `--duration` for an operator-stopped run. The terminal process must remain active; do not allow Windows sleep or hibernation).*
+
+- [ ] **Electrical Noise Evaluation:** Energize agitator motor, heater, and fan under independent laboratory control. Inspect raw signal noise for VFD ground loops or inductive coupling. (A software filter or rolling window is not a substitute for proper grounding and shielding).
+- [ ] **Live Monitor Test:** In a second terminal window, verify real-time monitoring runs without interfering with acquisition:
+  ```powershell
+  .\.venv\Scripts\python.exe -m tankdaq watch "$run"
+  ```
+- [ ] **Graceful Interruption Test:** Stop a test run using `Ctrl+C`. Verify that tasks release cleanly, status finalizes as `interrupted`, and buffered samples are completely drained.
+- [ ] **Data Export Verification:** Verify data export to CSV (and Parquet if PyArrow is installed). If `auto_export_csv: true` was enabled in `storage:`, the export folder (`export_csv_<hash>/`) is created automatically upon run finalization. Otherwise, export manually:
+  ```powershell
+  .\.venv\Scripts\python.exe -m tankdaq export "$run" --format csv
+  ```
+- [ ] **Archive Experimental Records:** Save the run folder, `devices.json`, `metadata.json`, calibration certificates, and pilot logs into long-term research storage.

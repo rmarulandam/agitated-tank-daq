@@ -1,0 +1,304 @@
+# POWERED-RIG PILOT DEMO CONFIGURATION (Phase 5 Operational Acceptance)
+#
+# This file demonstrates how a site-specific local configuration (configs/rig.local.yaml)
+# must be configured to pass validation and execute a calibrated hardware acquisition run
+# with the National Instruments backend (--backend ni --acknowledge-wiring).
+#
+# Key differences from configs/rig.yaml:
+# 1. checks.*: All 4 safety gates are marked true (wiring, supplies, RTD curve, Hall logic).
+# 2. Shunt resistors (R1-R5): Exact bench-measured resistances are entered (not nominal 250.0).
+# 3. analog.channels[*].scale: confirmed: true on all 7 channels with verified physical
+#    engineering ranges (Y_min, Y_max), signal ranges, and calibration_id provenance.
+# 4. counter.channels[*]: calibration_confirmed: true on all 3 channels with verified
+#    hz_per_unit factors, valid ranges, and calibration_id provenance.
+# 5. rtd.channels[*]: Individual probe calibration offsets and calibration_ids recorded.
+#
+# To use for your rig:
+#   Copy-Item configs\pilot.demo.yaml configs\rig.local.yaml
+# and adjust module names, serials, and measured values to match your physical hardware.
+
+schema_version: 1
+simulation_only: false
+
+run:
+  label: pilot_acceptance_run_01
+  operator: Lab Operator
+  notes: Agitated tank powered-rig pilot test run and operational acceptance.
+
+hardware:
+  chassis: cDAQ1
+  rtd_module: cDAQ1Mod1
+  analog_module: cDAQ1Mod2
+  counter_module: cDAQ1Mod3
+
+# Phase 3 & 4: All physical and documentary checks affirmed by the engineer
+checks:
+  wiring_verified: true
+  sensor_supplies_verified: true
+  rtd_curve_verified: true
+  hall_logic_verified: true
+
+sampling:
+  rtd_hz: 1.0
+  analog_hz: 10.0
+  counter_poll_hz: 2.0
+  flow_window_s: 10.0
+  buffer_seconds: 60.0
+  idle_timeout_s: 10.0
+  max_block_samples: 100
+  queue_blocks: 256
+
+rtd:
+  type: PT_3851
+  curve_note: Verified against TL4050 PT100 certificate (IEC 60751 standard curve, alpha=0.003851).
+  r0_ohm: 100.0
+  excitation_a: 0.001
+  adc_mode: HIGH_RESOLUTION
+  measurement_range_c:
+  - -20.0
+  - 100.0
+  channels:
+  - name: t_water_in_c
+    physical: cDAQ1Mod1/ai0
+    gain: 1.0
+    offset_c: 0.02
+    calibration_id: CAL-2026-PT100-01
+  - name: t_water_out_c
+    physical: cDAQ1Mod1/ai1
+    gain: 1.0
+    offset_c: -0.01
+    calibration_id: CAL-2026-PT100-02
+  - name: t_water_level_quarter_c
+    physical: cDAQ1Mod1/ai2
+    gain: 1.0
+    offset_c: 0.0
+    calibration_id: CAL-2026-PT100-03
+  - name: t_water_level_three_quarters_c
+    physical: cDAQ1Mod1/ai3
+    gain: 1.0
+    offset_c: 0.01
+    calibration_id: CAL-2026-PT100-04
+
+analog:
+  terminal_configuration: DIFFERENTIAL
+  channels:
+  # ai0: Inlet air temperature (4-20 mA across measured precision shunt R1)
+  - name: t_air_in_c
+    unit: degC
+    physical: cDAQ1Mod2/ai0
+    negative_input: ai8
+    daq_range_v:
+    - -10.0
+    - 10.0
+    source_note: Inlet air temperature transmitter (4-20 mA over measured shunt R1).
+    scale:
+      kind: current_loop
+      confirmed: true
+      engineering_range:
+      - -20.0
+      - 80.0
+      post_gain: 1.0
+      post_offset: 0.0
+      calibration_id: CAL-2026-TAIR-IN
+      shunt_id: R1
+      shunt_ohm: 249.85
+      signal_range_ma:
+      - 4.0
+      - 20.0
+
+  # ai1: Outlet air temperature (4-20 mA across measured precision shunt R2)
+  - name: t_air_out_c
+    unit: degC
+    physical: cDAQ1Mod2/ai1
+    negative_input: ai9
+    daq_range_v:
+    - -10.0
+    - 10.0
+    source_note: Outlet air temperature transmitter (4-20 mA over measured shunt R2).
+    scale:
+      kind: current_loop
+      confirmed: true
+      engineering_range:
+      - -20.0
+      - 80.0
+      post_gain: 1.0
+      post_offset: 0.0
+      calibration_id: CAL-2026-TAIR-OUT
+      shunt_id: R2
+      shunt_ohm: 250.12
+      signal_range_ma:
+      - 4.0
+      - 20.0
+
+  # ai2: Atmospheric pressure (4-20 mA absolute pressure variant across shunt R3)
+  - name: p_atm_pa
+    unit: Pa
+    physical: cDAQ1Mod2/ai2
+    negative_input: ai10
+    daq_range_v:
+    - -10.0
+    - 10.0
+    source_note: Barometric absolute pressure transmitter (4-20 mA over measured shunt R3).
+    scale:
+      kind: current_loop
+      confirmed: true
+      engineering_range:
+      - 0.0
+      - 120000.0
+      post_gain: 1.0
+      post_offset: 0.0
+      calibration_id: CAL-2026-PATM-01
+      shunt_id: R3
+      shunt_ohm: 249.95
+      signal_range_ma:
+      - 4.0
+      - 20.0
+
+  # ai3: Ambient relative humidity (4-20 mA across measured shunt R4)
+  - name: rh_ambient_pct
+    unit: percent_RH
+    physical: cDAQ1Mod2/ai3
+    negative_input: ai11
+    daq_range_v:
+    - -10.0
+    - 10.0
+    source_note: Ambient relative humidity transmitter (4-20 mA over measured shunt R4).
+    scale:
+      kind: current_loop
+      confirmed: true
+      engineering_range:
+      - 0.0
+      - 100.0
+      post_gain: 1.0
+      post_offset: 0.0
+      calibration_id: CAL-2026-RH-01
+      shunt_id: R4
+      shunt_ohm: 250.08
+      signal_range_ma:
+      - 4.0
+      - 20.0
+
+  # ai4: Air duct differential pressure (4-20 mA across measured shunt R5)
+  - name: dp_air_duct_pa
+    unit: Pa
+    physical: cDAQ1Mod2/ai4
+    negative_input: ai12
+    daq_range_v:
+    - -10.0
+    - 10.0
+    source_note: Air differential pressure transmitter (4-20 mA over measured shunt R5).
+    scale:
+      kind: current_loop
+      confirmed: true
+      engineering_range:
+      - 0.0
+      - 3000.0
+      post_gain: 1.0
+      post_offset: 0.0
+      calibration_id: CAL-2026-DPAIR-01
+      shunt_id: R5
+      shunt_ohm: 249.90
+      signal_range_ma:
+      - 4.0
+      - 20.0
+
+  # ai5: Tank water level (0-10 V linear voltage transmitter)
+  - name: level_water_m
+    unit: m
+    physical: cDAQ1Mod2/ai5
+    negative_input: ai13
+    daq_range_v:
+    - -10.0
+    - 10.0
+    source_note: Tank water level hydrostatic transmitter (0-10 V linear).
+    scale:
+      kind: voltage_linear
+      confirmed: true
+      engineering_range:
+      - 0.0
+      - 2.0
+      post_gain: 1.0
+      post_offset: 0.0
+      calibration_id: CAL-2026-LEVEL-01
+      signal_range_v:
+      - 0.0
+      - 10.0
+
+  # ai6: Motor electrical power (0-10 V linear transducer)
+  - name: power_motor_w
+    unit: W
+    physical: cDAQ1Mod2/ai6
+    negative_input: ai14
+    daq_range_v:
+    - -10.0
+    - 10.0
+    source_note: Agitator motor electrical power transducer (0-10 V linear).
+    scale:
+      kind: voltage_linear
+      confirmed: true
+      engineering_range:
+      - 0.0
+      - 1500.0
+      post_gain: 1.0
+      post_offset: 0.0
+      calibration_id: CAL-2026-PWR-01
+      signal_range_v:
+      - 0.0
+      - 10.0
+
+counter:
+  bits: 32
+  edge: RISING
+  channels:
+  # ctr0: Inlet water flow (Hall turbine sensor: F = 0.5 * Q -> 0.5 Hz per L/min)
+  - name: water_flow_in
+    unit: L/min
+    physical: cDAQ1Mod3/ctr0
+    pulse_terminal: /cDAQ1Mod3/PFI0
+    hz_per_unit: 0.5
+    calibration_confirmed: true
+    calibration_id: CAL-2026-FLOW-IN
+    valid_range:
+    - 5.0
+    - 150.0
+    nominal_source: 'DSC-742-R3 p2: F=0.5*Q (0.5 Hz per L/min, 5-150 L/min range).'
+
+  # ctr1: Outlet water flow (Hall turbine sensor: F = 0.5 * Q -> 0.5 Hz per L/min)
+  - name: water_flow_out
+    unit: L/min
+    physical: cDAQ1Mod3/ctr1
+    pulse_terminal: /cDAQ1Mod3/PFI1
+    hz_per_unit: 0.5
+    calibration_confirmed: true
+    calibration_id: CAL-2026-FLOW-OUT
+    valid_range:
+    - 5.0
+    - 150.0
+    nominal_source: 'DSC-742-R3 p2: F=0.5*Q (0.5 Hz per L/min, 5-150 L/min range).'
+
+  # ctr2: Impeller shaft tachometer (optical/hall disc with 60 pulses/revolution -> 1.0 Hz per RPM)
+  - name: impeller_rpm
+    unit: rpm
+    physical: cDAQ1Mod3/ctr2
+    pulse_terminal: /cDAQ1Mod3/PFI2
+    hz_per_unit: 1.0
+    calibration_confirmed: true
+    calibration_id: CAL-2026-TACH-01
+    valid_range:
+    - 10.0
+    - 600.0
+    nominal_source: 'hz_per_unit = pulses_per_rev / 60.0 (1.0 Hz/RPM for 60 pulses/rev).'
+
+storage:
+  tdms: true
+  auto_export_csv: true
+  auto_export_parquet: false
+  min_free_mb: 500.0
+  commit_interval_s: 1.0
+
+external:
+  impeller_rpm: null
+  method: ''
+  uncertainty_rpm: null
+  source: external_calculation_not_cDAQ
+

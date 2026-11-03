@@ -1,25 +1,24 @@
 # Quick start
 
-Extract the ZIP and open PowerShell in the `agitated-tank-daq` folder.
+Extract the project and open PowerShell in the `agitated-tank-daq` folder. Python 3.11–3.13 are supported (Python 3.12 or 3.13 recommended).
 
 ## Demonstrate without hardware
 
 ```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[test]"
-.\.venv\Scripts\python.exe -m tankdaq run --config configs\demo.yaml --backend sim --duration 60
-$run = (Get-ChildItem .\runs -Directory | Sort-Object LastWriteTime | Select-Object -Last 1).FullName
-.\.venv\Scripts\python.exe -m tankdaq inspect "$run"
-.\.venv\Scripts\python.exe -m tankdaq export "$run" --format csv
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m tankdaq inspect examples\simulated_run
+.\.venv\Scripts\python.exe -m tankdaq watch examples\simulated_run --once
+.\.venv\Scripts\python.exe -m tankdaq run --config configs\demo.yaml --backend sim --duration 15
 ```
 
-In another terminal, `python -m tankdaq watch "$run"` provides a live text display.
-Use the virtual environment's Python path as above. The monitor can stop without
-stopping acquisition. Ctrl+C in the acquisition terminal stops that run.
+## Prepare for the real rig
 
-## Before using the real rig
-
-Read `README.md` and `docs/COMMISSIONING.md`. Install the NI-DAQmx driver separately.
+1. Install a Windows NI-DAQmx driver version supporting cDAQ-9173, NI-9217,
+   NI-9204, and NI-9411 (or NI-9401).
+2. Close NI MAX test panels and any LabVIEW programs.
+3. Install the NI Python interface and inspect the connected hardware:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -e ".[ni,test]"
@@ -28,23 +27,24 @@ Copy-Item configs\rig.yaml configs\rig.local.yaml
 notepad configs\rig.local.yaml
 ```
 
-Set actual device/resource names. Complete the four physical-verification checks;
-set their fields true only when verified. The unknown analog scales may remain
+Set actual device/resource names (cDAQ-9173 chassis with NI-9217, NI-9204, and NI-9411 or NI-9401 digital module; channel names can be customized). Note that `configs/*.local.yaml` and `devices.json` are git-ignored. Complete the four physical-verification checks;
+set their fields true only when verified. The unknown analog and counter scales may remain
 unconfirmed for raw commissioning:
 
 ```powershell
 .\.venv\Scripts\python.exe -m tankdaq run --config configs\rig.local.yaml --backend ni --raw-only --acknowledge-wiring --duration 60
 ```
 
-For engineering-unit acquisition, establish and confirm every transmitter range
-and the Hall coefficient in the config, then omit `--raw-only`.
+After sensor ranges, measured shunt resistances and counter coefficients are
+confirmed in `rig.local.yaml`, run without `--raw-only`:
 
-Default rates: RTD 1 sample/s/channel, analog 10 samples/s/channel, counter polling
-2/s with a 10-second rolling flow window. Impeller RPM is an external record.
+```powershell
+.\.venv\Scripts\python.exe -m tankdaq run --config configs\rig.local.yaml --backend ni --acknowledge-wiring --duration 3600
+```
 
 Every run stores a unique SQLite record and metadata. Real NI runs also request
 per-task TDMS. Cross-module timestamps are estimates, not hardware-synchronized.
 This is acquisition software, not motor control or an emergency stop.
 
-Validation: 52 automated tests passed, one optional Parquet test skipped. Physical
+Validation: 61 automated tests passed (includes custom channel naming, 3-channel counter support, and NI-9401/NI-9411 support). Physical
 NI hardware and Windows acceptance testing remain outstanding. See TEST_REPORT.md.
