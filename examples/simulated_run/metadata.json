@@ -1,12 +1,12 @@
 {
-  "run_id": "20261101T125917_388195Z_SIM_SIMULATION_ae3d03",
+  "run_id": "20261104T025718_640546Z_SIM_SIMULATION_d0f1d9",
   "backend": "sim",
   "simulated": true,
   "raw_only": false,
   "status": "completed",
   "anchor": {
-    "epoch_ns": 1793537957832088600,
-    "mono_ns": 128589369557950
+    "epoch_ns": 1793761039040110300,
+    "mono_ns": 12914085476450
   },
   "environment": {
     "tankdaq": "0.1.0",
@@ -18,7 +18,7 @@
       "nidaqmx": null,
       "pyarrow": "23.0.0"
     },
-    "source_sha256": "a11c657ea2ffaac8a3bb5bf0ee87957f0791543c488d6e96703d358c97827088"
+    "source_sha256": "7314c01838500884f07a7c64f4b37cddc954eeeefe202d98ef319383d05673ff"
   },
   "config": {
     "schema_version": 1,
@@ -338,28 +338,24 @@
     },
     "storage": {
       "tdms": false,
+      "auto_export_csv": false,
+      "auto_export_parquet": false,
       "min_free_mb": 500.0,
       "commit_interval_s": 1.0
-    },
-    "external": {
-      "impeller_rpm": null,
-      "method": "",
-      "uncertainty_rpm": null,
-      "source": "external_calculation_not_cDAQ"
     }
   },
   "streams": {
     "rtd": {
       "actual_rate_hz": 1.0,
       "requested_rate_hz": 1.0,
-      "t0_est_s": 0.00558285,
+      "t0_est_s": 0.00558145,
       "simulated": true,
       "timing": "synthetic_sample_grid"
     },
     "analog": {
       "actual_rate_hz": 10.0,
       "requested_rate_hz": 10.0,
-      "t0_est_s": 0.00618235,
+      "t0_est_s": 0.00629225,
       "simulated": true,
       "timing": "synthetic_sample_grid"
     },
@@ -371,7 +367,7 @@
         "impeller_rpm": 120.0
       },
       "timing": "host_poll_midpoint",
-      "t0_est_s": 0.00674205
+      "t0_est_s": 0.00685705
     }
   },
   "row_counts": {
@@ -380,16 +376,10 @@
     "counter": 75
   },
   "timing_policy": "Independent hardware-timed AI tasks; host-estimated start offsets. Counter polls have host-midpoint timestamps. No cross-module synchronization guarantee.",
-  "original_config_sha256": "3a4e842b4bacbbbe4a369d8548c2520f6dcd13250bb4f7a42bbf4dac3b19ff3a",
+  "original_config_sha256": "2d317cf2a3180416f6846c438c16b8a6885feb9f4787dd03429c6c98b4554be2",
   "requested_duration_s": 12.0,
-  "external_impeller": {
-    "impeller_rpm": null,
-    "method": "",
-    "uncertainty_rpm": null,
-    "source": "external_calculation_not_cDAQ"
-  },
-  "ended_utc": "2026-11-01T12:59:29.854871+00:00",
-  "duration_s": 12.02278275,
+  "ended_utc": "2026-11-04T02:57:31.059003+00:00",
+  "duration_s": 12.01891025,
   "faults": [],
   "workers": [
     {
@@ -400,7 +390,7 @@
       "metadata": {
         "actual_rate_hz": 1.0,
         "requested_rate_hz": 1.0,
-        "t0_est_s": 0.00558285,
+        "t0_est_s": 0.00558145,
         "simulated": true,
         "timing": "synthetic_sample_grid"
       }
@@ -413,7 +403,7 @@
       "metadata": {
         "actual_rate_hz": 10.0,
         "requested_rate_hz": 10.0,
-        "t0_est_s": 0.00618235,
+        "t0_est_s": 0.00629225,
         "simulated": true,
         "timing": "synthetic_sample_grid"
       }
@@ -431,7 +421,7 @@
           "impeller_rpm": 120.0
         },
         "timing": "host_poll_midpoint",
-        "t0_est_s": 0.00674205
+        "t0_est_s": 0.00685705
       }
     }
   ],

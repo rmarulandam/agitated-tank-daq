@@ -260,8 +260,3 @@ storage:
   auto_export_parquet: false
   min_free_mb: 500.0
   commit_interval_s: 1.0
-external:
-  impeller_rpm: null
-  method: ''
-  uncertainty_rpm: null
-  source: external_calculation_not_cDAQ

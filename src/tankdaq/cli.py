@@ -22,7 +22,7 @@ def parser() -> argparse.ArgumentParser:
             s.add_argument("--quiet",action="store_true")
     s=sub.add_parser("devices",help="Enumerate NI devices, physical channels and terminal routes")
     s.add_argument("--output",type=Path)
-    for name in ("inspect","watch","export","note","attach-rpm"):
+    for name in ("inspect","watch","export","note"):
         s=sub.add_parser(name)
         s.add_argument("run_folder",type=Path)
         if name=="watch":
@@ -32,9 +32,6 @@ def parser() -> argparse.ArgumentParser:
             s.add_argument("--format",choices=("csv","parquet"),default="csv")
             s.add_argument("--output",type=Path)
         elif name=="note": s.add_argument("message")
-        elif name=="attach-rpm":
-            s.add_argument("--csv",type=Path,required=True)
-            s.add_argument("--alignment-note",required=True)
     return p
 
 def main(argv: list[str] | None=None) -> int:
@@ -68,7 +65,6 @@ def main(argv: list[str] | None=None) -> int:
         elif args.command=="watch": d.watch(args.run_folder,args.interval,args.once)
         elif args.command=="export": print(d.export_run(args.run_folder,args.format,args.output))
         elif args.command=="note": d.add_note(args.run_folder,args.message);print("Operator event recorded.")
-        elif args.command=="attach-rpm": print(d.attach_rpm(args.run_folder,args.csv,args.alignment_note))
         return 0
     except KeyboardInterrupt:
         return 130

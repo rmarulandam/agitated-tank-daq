@@ -30,4 +30,4 @@ The one-count step is shown as a resolution aid only. It excludes poll-time unce
 
 ## Manual records
 
-Optional external RPM cross-reference files are retained as their own measurement source. `t_rel_s` in an attached RPM CSV must already refer to this run's acquisition anchor. Attachment requires a written alignment explanation; no time shift, forward filling or interpolation is applied automatically. Manual notes added from a second process are labeled `operator_wall_clock`; do not use them as precision hardware events.
+Manual operator notes added from a second process (`tankdaq note`) are labeled `operator_wall_clock`; do not use them as precision hardware events. Impeller rotation is acquired continuously and exclusively through the hardware counter channel `impeller_rpm` on `cDAQ1Mod3/ctr2` (`PFI2`).

@@ -15,6 +15,3 @@ Inspect it after installing the package:
 The raw file is SQLite; the simulated backend deliberately does not create NI TDMS
 files. Absolute build-host paths in the generated export manifest record where
 this sample was generated; no such path is required to use the project.
-
-`external_rpm_TEMPLATE.csv` is a blank header template for your separate,
-externally calculated RPM record. It contains no invented RPM observations.

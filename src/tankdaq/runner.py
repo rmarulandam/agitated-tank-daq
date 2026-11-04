@@ -40,7 +40,6 @@ def run(cfg: dict[str, Any], config_path: Path, output_root: Path, *, backend: s
     store = RunStore(folder,cfg,clock,backend,raw_only)
     store.meta["original_config_sha256"] = sha256_file(folder/"config_original.yaml")
     store.meta["requested_duration_s"] = duration_s
-    store.meta["external_impeller"] = cfg["external"]
     stop = stop_event if stop_event is not None else threading.Event()
     out: queue.Queue = queue.Queue(maxsize=cfg["sampling"]["queue_blocks"])
     fault_queue: queue.SimpleQueue = queue.SimpleQueue()

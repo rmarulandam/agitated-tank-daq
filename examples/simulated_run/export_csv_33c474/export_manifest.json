@@ -1,6 +1,0 @@
-{
-  "source_run": "C:\\repos\\agitated-tank-daq\\tmp_sim_run\\20261101T125917_388195Z_SIM_SIMULATION_ae3d03",
-  "format": "csv",
-  "source_database_sha256": "0a43ad559d18fe6e47fae3978813f78a01dc73ca7505c49fc9303357d0b478f8",
-  "notes": "Long-form samples; raw values, quality flags and independent stream times are preserved."
-}

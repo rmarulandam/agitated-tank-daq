@@ -10,7 +10,7 @@ import pytest
 from tankdaq.models import Clock,AnalogBlock
 from tankdaq.storage import RunStore
 from tankdaq.runner import run
-from tankdaq.data_tools import export_run,inspect_run,attach_rpm,add_note,watch
+from tankdaq.data_tools import export_run,inspect_run,add_note,watch
 from tankdaq.backends import Worker
 
 @pytest.fixture
@@ -64,17 +64,16 @@ def test_export_refuses_running(completed):
     (completed/'RUNNING').touch()
     with pytest.raises(RuntimeError,match='Stop/finalize'):export_run(completed,'csv')
 
-def test_attach_rpm_preserves_separate_source(completed,tmp_path):
-    source=tmp_path/'rpm.csv'
-    source.write_text('t_rel_s,n_impeller_rpm,method,uncertainty_rpm\n0,36,external calculation,\n10,48,external calculation,0.8\n')
-    target=attach_rpm(completed,source,'DAQ anchor used as t=0 in the external record')
-    assert (target/'record.csv').read_bytes()==source.read_bytes()
-    assert json.loads((target/'provenance.json').read_text())['joined_to_samples'] is False
-
-def test_invalid_rpm_rejected(completed,tmp_path):
-    source=tmp_path/'bad.csv'
-    source.write_text('t_rel_s,n_impeller_rpm,method,uncertainty_rpm\n0,-1,unknown,\n')
-    with pytest.raises(ValueError):attach_rpm(completed,source,'test')
+def test_hardware_impeller_rpm_recorded(completed):
+    with sqlite3.connect(completed / "measurements.sqlite") as db:
+        rows = db.execute(
+            "SELECT count(*), min(frequency_hz), max(frequency_hz), min(value), max(value) "
+            "FROM counter WHERE channel='impeller_rpm' AND value IS NOT NULL"
+        ).fetchone()
+        count, min_f, max_f, min_v, max_v = rows
+        assert count > 0, "impeller_rpm counter records must be logged"
+        assert min_f >= 0 and max_f > 0, "impeller_rpm frequency must be positive"
+        assert min_v >= 0 and max_v > 0, "impeller_rpm scaled rate (RPM) must be positive" 
 
 def test_raw_only_run(tmp_path,demo,demo_path):
     demo['sampling']['rtd_hz']=5.

@@ -124,32 +124,3 @@ def add_note(folder: Path,message: str) -> None:
     finally:
         db.close()
 
-def attach_rpm(folder: Path, source: Path, alignment_note: str) -> Path:
-    if (folder/"RUNNING").exists():
-        raise RuntimeError("Attach external RPM after stopping the run")
-    if not (folder/"measurements.sqlite").exists(): raise FileNotFoundError(folder)
-    if not alignment_note.strip(): raise ValueError("Explain how external timestamps align with DAQ t=0")
-    with source.open(encoding="utf-8-sig",newline="") as fh:
-        reader=csv.DictReader(fh)
-        required={"t_rel_s","n_impeller_rpm","method","uncertainty_rpm"}
-        if not reader.fieldnames or not required.issubset(reader.fieldnames):
-            raise ValueError("RPM CSV columns must include "+", ".join(sorted(required)))
-        previous=-math.inf
-        count=0
-        for row in reader:
-            t,rpm=float(row["t_rel_s"]),float(row["n_impeller_rpm"])
-            if not math.isfinite(t) or not math.isfinite(rpm) or t<0 or rpm<0 or t<=previous:
-                raise ValueError("RPM timestamps must be finite, nonnegative and increasing; RPM must be finite and nonnegative")
-            if not row["method"].strip(): raise ValueError("Every external RPM row requires its calculation method")
-            if row["uncertainty_rpm"].strip():
-                u=float(row["uncertainty_rpm"])
-                if not math.isfinite(u) or u<0: raise ValueError("RPM uncertainty must be nonnegative or blank")
-            previous=t;count+=1
-        if count==0: raise ValueError("RPM CSV contains no records")
-    target=folder/"external_rpm"
-    target.mkdir(exist_ok=False)
-    shutil.copy2(source,target/"record.csv")
-    json_dump(target/"provenance.json",dict(source_file=source.name,source_sha256=sha256_file(source),
-              records=count,acquisition="external_calculation_not_cDAQ",alignment_note=alignment_note,
-              joined_to_samples=False,interpolation_applied=False))
-    return target

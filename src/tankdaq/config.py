@@ -12,7 +12,7 @@ class ConfigError(ValueError):
 
 # Fail closed on misspelled top-level sections.
 ROOT_KEYS = {"schema_version", "simulation_only", "run", "hardware", "checks",
-             "sampling", "rtd", "analog", "counter", "storage", "external"}
+             "sampling", "rtd", "analog", "counter", "storage"}
 DEFAULT_RTD_NAMES = ("t_water_in_c", "t_water_out_c", "t_water_level_quarter_c", "t_water_level_three_quarters_c")
 RTD_NAMES = DEFAULT_RTD_NAMES
 DEFAULT_ANALOG_NAMES = ("t_air_in_c", "t_air_out_c", "p_atm_pa", "rh_ambient_pct",
@@ -175,12 +175,6 @@ def validate(cfg: dict[str, Any], *, backend: str = "sim", raw_only: bool = Fals
                 import pyarrow  # noqa: F401
             except ImportError as exc:
                 raise ConfigError("Parquet export requires: python -m pip install '.[parquet]'") from exc
-        ext = cfg["external"]
-        if ext["impeller_rpm"] is not None:
-            if number(ext["impeller_rpm"], "external.impeller_rpm") < 0 or not ext["method"]:
-                raise ConfigError("Externally entered RPM requires nonnegative RPM and a method")
-        if ext["uncertainty_rpm"] is not None and number(ext["uncertainty_rpm"], "uncertainty_rpm") < 0:
-            raise ConfigError("uncertainty_rpm cannot be negative")
         if backend == "ni":
             if cfg["simulation_only"]:
                 raise ConfigError("A simulation_only configuration can never operate NI hardware")

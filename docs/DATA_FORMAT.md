@@ -31,5 +31,3 @@ Exports can occur in two ways:
 2. **Manual Post-Run Export:** Execute `tankdaq export <run_folder> --format csv` (or `--format parquet`) at any time on a finalized run folder.
 
 Exports do not alter the source database, rescale old measurements, infer missing calibrations, or synchronize streams. An export is refused while `RUNNING` exists. A note added later changes the database; prior exported copies remain snapshots of the earlier database state.
-
-Optional external RPM reference attachments live under `external_rpm/` and retain their original content and hash.

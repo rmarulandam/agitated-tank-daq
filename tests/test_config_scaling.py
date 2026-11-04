@@ -183,3 +183,9 @@ def test_storage_auto_export_boolean_check(demo):
     demo["storage"]["auto_export_parquet"] = 123
     with pytest.raises(ConfigError, match="storage.auto_export_parquet"):
         validate(demo)
+
+
+def test_external_rpm_section_rejected(demo):
+    demo["external"] = {"impeller_rpm": 100, "method": "manual"}
+    with pytest.raises(ConfigError, match="Top-level keys"):
+        validate(demo)

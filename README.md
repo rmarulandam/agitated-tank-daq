@@ -136,7 +136,7 @@ runs/<UTC>_NI_agitated_tank_<unique>/
 
 SQLite is the always-on application record, with one writer, WAL mode and full synchronization at commits. The default commit interval is one second. An abrupt process/power failure can lose the current uncommitted tail; UPS/storage reliability remains an experimental responsibility. Queue overflow, driver errors, sample-index discontinuities, missing required streams, disk threshold violations and writer failures fail the run rather than being silently ignored. Shutdown attempts to stop each analog task and drain its buffered tail; a drain failure is recorded.
 
-NI runs additionally request **separate driver TDMS files for each AI task**. These use `LOG_AND_READ`; reads must continue for NI-DAQmx to stream the data. TDMS is not an independent fail-safe logger if Python or the read loop stalls. Counter polls and external RPM attachments are stored in SQLite and `external_rpm/` respectively. The simulator does not fabricate TDMS files.
+NI runs additionally request **separate driver TDMS files for each AI task**. These use `LOG_AND_READ`; reads must continue for NI-DAQmx to stream the data. TDMS is not an independent fail-safe logger if Python or the read loop stalls. Counter polls (water flow and impeller RPM) are stored in SQLite. Impeller rotation is acquired exclusively through the hardware counter channel `impeller_rpm` on `cDAQ1Mod3/ctr2`. The simulator does not fabricate TDMS files.
 
 ### Automatic Export on Completion (Optional)
 
@@ -165,23 +165,9 @@ You can also export any finalized run manually at any time:
 
 Exports are long-form: one row per channel and sample, retaining raw and engineering values, quality flags and stream timestamps. CSV requires no additional library. Parquet requires optional PyArrow. The export does not interpolate channels onto a common time grid. See `docs/DATA_FORMAT.md` and `docs/TIMING.md` before combining streams.
 
-## 6. Operator notes and optional external RPM reference
+## 6. Operator notes during acquisition
 
-In addition to the hardware `impeller_rpm` counter channel on `cDAQ1Mod3/ctr2`, the application supports recording an optional external RPM cross-reference (e.g., from a handheld optical tachometer or VFD display) in `external` or attaching a separate CSV:
-
-```csv
-t_rel_s,n_impeller_rpm,method,uncertainty_rpm
-0,36,external calibration curve revision 1,0.8
-300,48,external calibration curve revision 1,0.8
-```
-
-`examples/external_rpm_TEMPLATE.csv` contains only the header. Attach a completed file after the run:
-
-```powershell
-.\.venv\Scripts\python.exe -m tankdaq attach-rpm "$run" --csv .\my_rpm.csv --alignment-note "External record aligned to this run's acquisition t=0; describe how and give any known timing uncertainty."
-```
-
-The original CSV and SHA-256 are preserved. For operator events during a run:
+Operator events and observations (e.g. setpoint changes, manual valve adjustments, visual milestones) can be recorded into the run's audit trail at any time from a separate terminal:
 
 ```powershell
 .\.venv\Scripts\python.exe -m tankdaq note "$run" "Operator changed the impeller speed setting."
@@ -217,7 +203,7 @@ agitated-tank-daq/
 │   ├── DATA_FORMAT.md        # SQLite and export schema specification
 │   ├── SOURCES.md            # Hardware quotes, sensor specifications, and references
 │   └── TIMING.md             # Timing, sampling, counter latency, and jitter documentation
-├── examples/                 # Sample simulated run artifacts and external RPM template
+├── examples/                 # Sample simulated run artifacts
 ├── scripts/                  # Convenience PowerShell scripts (setup.ps1, run_demo.ps1)
 ├── src/tankdaq/              # Core Python package
 │   ├── __init__.py           # Package metadata and version
@@ -225,13 +211,13 @@ agitated-tank-daq/
 │   ├── backends.py           # Worker abstractions and synthetic simulation producers
 │   ├── cli.py                # CLI parser and command dispatch
 │   ├── config.py             # Config loading, syntax validation, and safety verification
-│   ├── data_tools.py         # Read-only inspection, live terminal monitor, export, and RPM attachment
+│   ├── data_tools.py         # Read-only inspection, live terminal monitor, and export
 │   ├── models.py             # Data classes (AnalogBlock, CounterPoint, Clock, WorkerOutcome)
 │   ├── ni_backend.py         # NI-DAQmx hardware workers (NI-9217, NI-9204, NI-9411/NI-9401)
 │   ├── runner.py             # Coordinator: worker threads, bounded queue, failure tracking
 │   ├── scaling.py            # Voltage scaling, current loop math, and rolling pulse-rate calculation
 │   └── storage.py            # Transactional SQLite writer, WAL checkpoints, metadata tracking
-└── tests/                    # Automated pytest suite (61 tests across 3 test modules)
+└── tests/                    # Automated pytest suite (66 tests across 3 test modules)
 ```
 
 The source basis is the agreed wiring specification and the two supplied DAQ Solutions quotations. Unknown or contradictory sensor details remain unconfirmed. NI API behaviors were checked against primary NI documentation. See [`docs/SOURCES.md`](docs/SOURCES.md), [`docs/COMMISSIONING.md`](docs/COMMISSIONING.md), [`TEST_REPORT.md`](TEST_REPORT.md), and the included test output.
