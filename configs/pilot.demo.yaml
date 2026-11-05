@@ -27,9 +27,9 @@ run:
 
 hardware:
   chassis: cDAQ1
-  rtd_module: cDAQ1Mod1
-  analog_module: cDAQ1Mod2
-  counter_module: cDAQ1Mod3
+  rtd_module: cDAQ1Mod1      # NI-9217 (Slot 1)
+  analog_module: cDAQ1Mod2   # NI-9204 (Slot 2)
+  counter_module: cDAQ1Mod3  # NI-9401 (Slot 3)
 
 # Phase 3 & 4: All physical and documentary checks affirmed by the engineer
 checks:

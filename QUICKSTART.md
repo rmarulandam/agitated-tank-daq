@@ -16,7 +16,7 @@ py -3.12 -m venv .venv
 ## Prepare for the real rig
 
 1. Install a Windows NI-DAQmx driver version supporting cDAQ-9173, NI-9217,
-   NI-9204, and NI-9411 (or NI-9401).
+   NI-9204, and NI-9401.
 2. Close NI MAX test panels and any LabVIEW programs.
 3. Install the NI Python interface and inspect the connected hardware:
 
@@ -27,7 +27,7 @@ Copy-Item configs\rig.yaml configs\rig.local.yaml
 notepad configs\rig.local.yaml
 ```
 
-Set actual device/resource names (cDAQ-9173 chassis with NI-9217, NI-9204, and NI-9411 or NI-9401 digital module; channel names can be customized). Note that `configs/*.local.yaml` and `devices.json` are git-ignored. Complete the four physical-verification checks;
+Set actual device/resource names (cDAQ-9173 chassis with NI-9217, NI-9204, and NI-9401 digital module; channel names can be customized). Note that `configs/*.local.yaml` and `devices.json` are git-ignored. Complete the four physical-verification checks;
 set their fields true only when verified. The unknown analog and counter scales may remain
 unconfirmed for raw commissioning:
 
@@ -46,5 +46,5 @@ Every run stores a unique SQLite record and metadata. Real NI runs also request
 per-task TDMS. Cross-module timestamps are estimates, not hardware-synchronized.
 This is acquisition software, not motor control or an emergency stop.
 
-Validation: 61 automated tests passed (includes custom channel naming, 3-channel counter support, and NI-9401/NI-9411 support). Physical
+Validation: 67 automated tests passed (includes custom channel naming, 3-channel counter support, and dedicated NI-9401 support). Physical
 NI hardware and Windows acceptance testing remain outstanding. See TEST_REPORT.md.

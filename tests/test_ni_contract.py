@@ -94,7 +94,7 @@ def test_counter_contract(rig,fake_api):
 
 def make_inventory(rig):
     hw=rig['hardware'];devices=[]
-    for key,model in [('chassis','9173'),('rtd_module','9217'),('analog_module','9204'),('counter_module','9411')]:
+    for key,model in [('chassis','9173'),('rtd_module','9217'),('analog_module','9204'),('counter_module','9401')]:
         devices.append(dict(name=hw[key],product_type='NI '+model,is_simulated=False,
                             ai_physical_chans=[],ci_physical_chans=[],terminals=[]))
     devices[1]['ai_physical_chans']=[x['physical'] for x in rig['rtd']['channels']]
@@ -116,3 +116,7 @@ def test_inventory_rejects_wrong_counter_route(rig):
 def test_inventory_rejects_wrong_module(rig):
     info=make_inventory(rig);info['devices'][2]['product_type']='NI 9205'
     with pytest.raises(RuntimeError,match='expected model'):verify_inventory(rig,info)
+
+def test_inventory_rejects_unsupported_counter_module(rig):
+    info=make_inventory(rig);info['devices'][3]['product_type']='NI 9411'
+    with pytest.raises(RuntimeError,match=r"expected model in \('9401',\), found NI 9411"):verify_inventory(rig,info)

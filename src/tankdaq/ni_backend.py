@@ -48,7 +48,7 @@ def inventory() -> dict[str, Any]:
 def verify_inventory(cfg: dict[str, Any], info: dict[str, Any]) -> None:
     devices = {d["name"]:d for d in info["devices"]}
     hw = cfg["hardware"]
-    for key, models in (("chassis",("9173",)),("rtd_module",("9217",)),("analog_module",("9204",)),("counter_module",("9411","9401"))):
+    for key, models in (("chassis",("9173",)),("rtd_module",("9217",)),("analog_module",("9204",)),("counter_module",("9401",))):
         name = hw[key]
         if name not in devices:
             raise RuntimeError(f"Required {key} {name} not found. Available: {list(devices)}")

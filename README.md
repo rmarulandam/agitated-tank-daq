@@ -4,7 +4,7 @@ A text-based, **acquisition-only** Python application for the agreed experimenta
 
 - cDAQ-9173 with NI-9217: four 4-wire PT100 water temperatures (`t_water_in_c`, `t_water_out_c`, `t_water_level_quarter_c`, `t_water_level_three_quarters_c`).
 - NI-9204: eight differential voltage channels, including seven 250-ohm shunts (`t_air_in_c`, `rh_air_in`, `t_air_out_c`, `rh_air_out`, `p_atm_pa`, `rh_ambient_pct`, `dp_air_duct_pa`) and one 0–10 V linear channel (`power_motor_w`).
-- NI-9411 or NI-9401: three pulse-counter channels (`water_flow_in`, `water_flow_out`, `impeller_rpm`) routed to chassis counters (`ctr0`, `ctr1`, `ctr2`).
+- NI-9401: three pulse-counter channels (`water_flow_in`, `water_flow_out`, `impeller_rpm`) routed to chassis counters (`ctr0`, `ctr1`, `ctr2`).
 
 The NI backend uses NI's `nidaqmx` Python API and the separately installed NI-DAQmx driver. The simulator needs neither NI hardware nor the NI driver.
 
@@ -52,7 +52,7 @@ Acquisition, storage, and visualization run on separate threads to prevent disk 
 
 - **Independent Acquisition Workers:**
   - **Analog Tasks:** Two continuous, hardware-clocked analog input tasks run independently: a 4-channel RTD task (NI-9217) and a 7-channel differential voltage task (NI-9204).
-  - **Counter Tasks:** A third worker starts cumulative rising-edge counting once across three chassis counters (NI-9411 or NI-9401) for inlet water flow, outlet water flow, and axis impeller revolutions, polling count snapshots at regular intervals.
+  - **Counter Tasks:** A third worker starts cumulative rising-edge counting once across three chassis counters (NI-9401) for inlet water flow, outlet water flow, and axis impeller revolutions, polling count snapshots at regular intervals.
 - **Transactional Bounded Pipeline:** Producers push sample blocks into a shared, memory-bounded queue. A dedicated writer thread consumes this queue and commits records to an SQLite database in Write-Ahead Logging (WAL) mode. This isolates acquisition from disk latency; if disk writes fall behind, the bounded queue triggers an immediate, clean failure rather than silently discarding samples.
 - **Decoupled Terminal Monitor:** The live terminal monitor (`tankdaq watch`) queries `measurements.sqlite` in read-only mode (`?mode=ro`). Because the display never owns or communicates directly with the DAQ tasks, viewing, pausing, resizing, or closing the monitor cannot interrupt ongoing acquisition or drop hardware samples.
 
@@ -79,7 +79,7 @@ The software enforces the **physical module and terminal topology**, while chann
   - Raw values: Linearized degrees Celsius from DAQmx.
 - **Slot 2: NI-9204 (Differential Voltage / Current Loops)**: Exactly 8 differential pairs on `ai0/ai8` through `ai7/ai15`.
   - Raw values: Measured voltage (V) across differential inputs (or across shunt resistors for 4–20 mA loops).
-- **Slot 3: NI-9411 or NI-9401 (Digital Counter)**: Three digital input terminals (e.g. `PFI0`, `PFI1`, `PFI2`) routed to chassis counter resources (e.g. `ctr0`, `ctr1`, `ctr2`).
+- **Slot 3: NI-9401 (Digital Counter)**: Three digital input terminals (e.g. `PFI0`, `PFI1`, `PFI2`) routed to chassis counter resources (e.g. `ctr0`, `ctr1`, `ctr2`).
   - Raw values: Cumulative hardware pulse count per channel.
 
 All channel names (`name`) can be customized in your YAML configuration (e.g. `rig.local.yaml`) to match your experiment. Names must use 1–50 ASCII letters, digits, or underscores starting with a letter (`[A-Za-z][A-Za-z0-9_]{0,49}`), and must be unique across all streams.
@@ -108,7 +108,7 @@ The table below illustrates the default template included with `configs/rig.yaml
 
 The NI-9204 is explicitly configured as `DIFF`. Its negative inputs are paired differential returns (`AI8` through `AI15`) and are not added as extra DAQ channels; all eight differential channels (`ai0/ai8` through `ai7/ai15`) are utilized. In the template configuration, Changor transmitter models provide two distinct outputs (temperature and relative humidity) for both inlet air (`t_air_in_c` on `ai0/ai8`, `rh_air_in` on `ai1/ai9`) and outlet air (`t_air_out_c` on `ai2/ai10`, `rh_air_out` on `ai3/ai11`). R1–R7 are associated with the seven current-loop channels (`ai0` through `ai6`); the 0–10 V channel (`ai7` for motor electrical power in `W`) is configured with `scale.kind: voltage_linear` and connects directly without a shunt. Tank water level (`level_water_m`) is no longer included. The unused fourth chassis slot remains unused.
 
-Each counter channel's resource is selected explicitly under `counter.channels`; `tankdaq devices` lists the available counter names and PFI terminals. If your installation enumerates counters under the chassis rather than the module, set each channel's `physical` field to the exact listed resource (e.g. `cDAQ1/ctr0`, `cDAQ1/ctr1`, `cDAQ1/ctr2`). Keep each `pulse_terminal` pointed at the physical NI-9411 or NI-9401 input (`PFI0`, `PFI1`, `PFI2`). Resource existence is checked first; DAQmx task commit validates the routes. The software never substitutes another input automatically.
+Each counter channel's resource is selected explicitly under `counter.channels`; `tankdaq devices` lists the available counter names and PFI terminals. If your installation enumerates counters under the chassis rather than the module, set each channel's `physical` field to the exact listed resource (e.g. `cDAQ1/ctr0`, `cDAQ1/ctr1`, `cDAQ1/ctr2`). Keep each `pulse_terminal` pointed at the physical NI-9401 input (`PFI0`, `PFI1`, `PFI2`). Resource existence is checked first; DAQmx task commit validates the routes. The software never substitutes another input automatically.
 
 ## 4. Hardware commissioning
 
@@ -178,11 +178,11 @@ Operator notes use host wall-clock time and are labeled accordingly; clock chang
 
 ## 7. What this release does not claim
 
-The tasks are **not hardware-synchronized to each other**. Timestamps on different modules must not be treated as exactly simultaneous. RTD and multiplexed analog channel conversion/filter delays are not corrected. The default architecture is for low-rate thermal and process measurements, not proof of suitability for fast transient system identification. See the timing document.
+The tasks are **not hardware-synchronized to each other**. Timestamps on different modules must not be treated as simultaneous. RTD and multiplexed analog channel conversion/filter delays are not corrected. The default architecture is for low-rate thermal and process measurements. See the timing document.
 
-The application does not verify pressure plumbing, gauge versus absolute pressure reference, Hall pull-up wiring, 24 V common-mode safety, airflow profile representativeness, or exact sensor electrical variants. Those are physical commissioning requirements.
+The application does not verify gauge versus absolute pressure reference or 24 V common-mode safety. Those are physical commissioning requirements.
 
-There is no browser dashboard in this release; the live display is the implemented terminal `watch` command. There is no LabVIEW component, Modbus backend, motor controller, automatic restart of a failed acquisition, or automatic replacement of a missing sensor by simulated data.
+There is no browser dashboard in this release; the live display is the implemented terminal `watch` command.
 
 ## 8. Tests, structure and sources
 
@@ -190,7 +190,7 @@ There is no browser dashboard in this release; the live display is the implement
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-Automated suite: **66 passed** tests covering safety/configuration gates, configurable channel names and syntax validation, differential channel mapping, multi-channel counter routing, scaling, count rollover, zero-pulse ambiguity, rolling-window timing, raw-only acquisition, failure handling, simulation integration, CSV export, Parquet export, and NI API contract mocks (including both NI-9411 and NI-9401 digital counter modules).
+Automated suite: **67 passed** tests covering safety/configuration gates, configurable channel names and syntax validation, differential channel mapping, multi-channel counter routing, scaling, count rollover, zero-pulse ambiguity, rolling-window timing, raw-only acquisition, failure handling, simulation integration, CSV export, Parquet export, and NI API contract mocks (verifying NI-9401 digital counter module acceptance and strict rejection of unauthorized modules such as NI-9411).
 
 ### Repository Structure
 
@@ -214,11 +214,11 @@ agitated-tank-daq/
 │   ├── config.py             # Config loading, syntax validation, and safety verification
 │   ├── data_tools.py         # Read-only inspection, live terminal monitor, and export
 │   ├── models.py             # Data classes (AnalogBlock, CounterPoint, Clock, WorkerOutcome)
-│   ├── ni_backend.py         # NI-DAQmx hardware workers (NI-9217, NI-9204, NI-9411/NI-9401)
+│   ├── ni_backend.py         # NI-DAQmx hardware workers (NI-9217, NI-9204, NI-9401)
 │   ├── runner.py             # Coordinator: worker threads, bounded queue, failure tracking
 │   ├── scaling.py            # Voltage scaling, current loop math, and rolling pulse-rate calculation
 │   └── storage.py            # Transactional SQLite writer, WAL checkpoints, metadata tracking
-└── tests/                    # Automated pytest suite (66 tests across 3 test modules)
+└── tests/                    # Automated pytest suite (67 tests across 3 test modules)
 ```
 
 The source basis is the agreed wiring specification and the two supplied DAQ Solutions quotations. Unknown or contradictory sensor details remain unconfirmed. NI API behaviors were checked against primary NI documentation. See [`docs/SOURCES.md`](docs/SOURCES.md), [`docs/COMMISSIONING.md`](docs/COMMISSIONING.md), [`TEST_REPORT.md`](TEST_REPORT.md), and the included test output.

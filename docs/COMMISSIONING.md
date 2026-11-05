@@ -23,7 +23,7 @@ Complete these steps on the host PC before connecting field instrumentation:
 - [ ] **Verify Chassis & Module Detection (NI MAX):** Connect the cDAQ-9173 via USB, open NI MAX, and verify all modules appear under **Devices and Interfaces**:
   - Slot 1: NI-9217 (4-channel RTD)
   - Slot 2: NI-9204 (8 differential analog voltage channels)
-  - Slot 3: NI-9411 or NI-9401 (3 digital counter inputs)
+  - Slot 3: NI-9401 (3 digital counter inputs)
 - [ ] **Generate Python Hardware Inventory:**
   ```powershell
   .\.venv\Scripts\python.exe -m tankdaq devices --output devices.json
@@ -67,8 +67,8 @@ Keep agitator motor, valves, and heater **physically locked out and unpowered** 
   - **Motor Electrical Power (`ai7`):** Confirm 0–10 V linear voltage output and verify power (`W`) scaling endpoints.
 
 ### 1.4 Digital Counters: Water Flow & Impeller RPM (`hall_logic_verified`)
-- [ ] **Module Support:** Verify the digital module is either an NI-9411 or NI-9401.
-- [ ] **Pulse Conditioning:** Confirm pulse sensor output topologies (5 V TTL vs. open-collector) for inlet flow (`water_flow_in`), outlet flow (`water_flow_out`), and axis impeller tachometer (`impeller_rpm`). Ensure required external pull-up resistors are installed if using open-collector sensors.
+- [ ] **Module Support:** Verify the digital module installed in Slot 3 is an NI-9401 (8-channel, 5 V/TTL high-speed digital I/O). The rig exclusively uses the NI-9401; NI-9411 is not used.
+- [ ] **Pulse Conditioning & Voltage Levels:** Confirm pulse sensor output topologies for inlet flow (`water_flow_in`), outlet flow (`water_flow_out`), and axis impeller tachometer (`impeller_rpm`). The NI-9401 requires standard 5 V TTL signal levels (logic low $\le 0.8\text{ V}$, logic high $\ge 2.0\text{ V}$, maximum input $5.25\text{ V}$). If using open-collector Hall-effect or optical sensors, ensure external pull-up resistors are tied to the +5 V DC power rail (do not tie to a 24 V rail, which would exceed the NI-9401 digital input ratings).
 - [ ] **Terminal Routes:** Verify physical pulse wiring connects to the configured terminal routes (`/cDAQ1Mod3/PFI0` for `ctr0`, `/cDAQ1Mod3/PFI1` for `ctr1`, and `/cDAQ1Mod3/PFI2` for `ctr2`).
 
 ---
