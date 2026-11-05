@@ -1,6 +1,0 @@
-id,utc_ns,t_rel_s,severity,source,message
-1,1793761039040138800,3.025e-05,INFO,coordinator,All tasks prepared. Starting independent producers
-2,1793761039047179900,0.00707165,INFO,rtd,"{""actual_rate_hz"": 1.0, ""requested_rate_hz"": 1.0, ""t0_est_s"": 0.00558145, ""simulated"": true, ""timing"": ""synthetic_sample_grid""}"
-3,1793761039052623900,0.01251475,INFO,analog,"{""actual_rate_hz"": 10.0, ""requested_rate_hz"": 10.0, ""t0_est_s"": 0.00629225, ""simulated"": true, ""timing"": ""synthetic_sample_grid""}"
-4,1793761039057661200,0.01755235,INFO,counter,"{""simulated"": true, ""nominal_simulated_frequencies_hz"": {""water_flow_in"": 15.0, ""water_flow_out"": 15.0, ""impeller_rpm"": 120.0}, ""timing"": ""host_poll_midpoint"", ""t0_est_s"": 0.00685705}"
-5,1793761051059030300,12.01892105,INFO,coordinator,Run ended: completed

@@ -69,7 +69,7 @@ def test_rtd_contract(rig,tmp_path,fake_api):
 
 def test_analog_contract(rig,tmp_path,fake_api):
     w=NIAnalog('analog',rig,tmp_path);w.prepare();task=fake_api[-1]
-    assert len(task.ai_channels.voltage)==7
+    assert len(task.ai_channels.voltage)==8
     assert all(x['terminal_config']=='DIFF' for x in task.ai_channels.voltage)
     assert all(x['min_val']==-10. and x['max_val']==10. for x in task.ai_channels.voltage)
     assert task.in_stream.over_write=='NO_OVERWRITE'

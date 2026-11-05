@@ -41,7 +41,7 @@ def test_wrong_differential_pair(demo):
     with pytest.raises(ConfigError,match='differential pairs'):validate(demo)
 
 def test_no_guessed_signal_range(demo):
-    demo['analog']['channels'][5]['scale']['signal_range_v']=None
+    demo['analog']['channels'][7]['scale']['signal_range_v']=None
     with pytest.raises(ConfigError,match='signal_range_v'):validate(demo)
 
 def test_unknown_top_level_key(demo):
@@ -59,9 +59,7 @@ def test_current_scale_endpoints(demo,voltage,expected):
 
 @pytest.mark.parametrize('voltage,fraction',[(0.,0.),(5.,.5),(10.,1.)])
 def test_voltage_linear_scale(demo,voltage,fraction):
-    ch_level=demo['analog']['channels'][5]
-    ch_power=demo['analog']['channels'][6]
-    assert convert_voltage(voltage,ch_level,raw_only=False).value==pytest.approx(fraction*2.0)
+    ch_power=demo['analog']['channels'][7]
     assert convert_voltage(voltage,ch_power,raw_only=False).value==pytest.approx(fraction*1500.0)
 
 def test_measured_shunt_is_used(demo):
@@ -134,7 +132,7 @@ def test_custom_channel_names_accepted(demo):
     custom_rtd = ["t_inlet_c", "t_outlet_c", "t_top_c", "t_bottom_c"]
     for i, name in enumerate(custom_rtd):
         demo["rtd"]["channels"][i]["name"] = name
-    custom_analog = ["t_air_1_c", "t_air_2_c", "p_baro_pa", "humidity_pct", "dp_duct_pa", "water_lvl_m", "motor_pwr_w"]
+    custom_analog = ["t_air_1_c", "rh_air_1", "t_air_2_c", "rh_air_2", "p_baro_pa", "humidity_pct", "dp_duct_pa", "motor_pwr_w"]
     for i, name in enumerate(custom_analog):
         demo["analog"]["channels"][i]["name"] = name
     custom_counters = ["q_in_l_min", "q_out_l_min", "shaft_rpm"]
@@ -147,9 +145,9 @@ def test_rtd_count_must_be_four(demo):
     with pytest.raises(ConfigError, match="Four RTD channels are required"):
         validate(demo)
 
-def test_analog_count_must_be_seven(demo):
-    demo["analog"]["channels"] = demo["analog"]["channels"][:6]
-    with pytest.raises(ConfigError, match="Seven analog channels are required"):
+def test_analog_count_must_be_eight(demo):
+    demo["analog"]["channels"] = demo["analog"]["channels"][:7]
+    with pytest.raises(ConfigError, match="Eight analog channels are required"):
         validate(demo)
 
 def test_counter_count_must_be_three(demo):

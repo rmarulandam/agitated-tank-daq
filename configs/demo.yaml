@@ -66,7 +66,7 @@ analog:
     daq_range_v:
     - -10.0
     - 10.0
-    source_note: Inlet air temperature transmitter (4-20 mA over shunt R1); verify
+    source_note: Inlet air temperature transmitter (Changor T/RH model, 4-20 mA over shunt R1); verify
       range endpoints.
     scale:
       kind: current_loop
@@ -82,14 +82,37 @@ analog:
       signal_range_ma:
       - 4.0
       - 20.0
-  - name: t_air_out_c
-    unit: degC
+  - name: rh_air_in
+    unit: percent_RH
     physical: cDAQ1Mod2/ai1
     negative_input: ai9
     daq_range_v:
     - -10.0
     - 10.0
-    source_note: Outlet air temperature transmitter (4-20 mA over shunt R2); verify
+    source_note: Inlet air relative humidity transmitter (Changor T/RH model, 4-20 mA over shunt R2);
+      verify range endpoints.
+    scale:
+      kind: current_loop
+      confirmed: true
+      engineering_range:
+      - 0.0
+      - 100.0
+      post_gain: 1.0
+      post_offset: 0.0
+      calibration_id: SYNTHETIC_EXAMPLE_ONLY
+      shunt_id: R2
+      shunt_ohm: 250.0
+      signal_range_ma:
+      - 4.0
+      - 20.0
+  - name: t_air_out_c
+    unit: degC
+    physical: cDAQ1Mod2/ai2
+    negative_input: ai10
+    daq_range_v:
+    - -10.0
+    - 10.0
+    source_note: Outlet air temperature transmitter (Changor T/RH model, 4-20 mA over shunt R3); verify
       range endpoints.
     scale:
       kind: current_loop
@@ -100,42 +123,20 @@ analog:
       post_gain: 1.0
       post_offset: 0.0
       calibration_id: SYNTHETIC_EXAMPLE_ONLY
-      shunt_id: R2
-      shunt_ohm: 250.0
-      signal_range_ma:
-      - 4.0
-      - 20.0
-  - name: p_atm_pa
-    unit: Pa
-    physical: cDAQ1Mod2/ai2
-    negative_input: ai10
-    daq_range_v:
-    - -10.0
-    - 10.0
-    source_note: Quoted available analog/RS485 variants; confirm actual 4-20 mA absolute-pressure
-      variant.
-    scale:
-      kind: current_loop
-      confirmed: true
-      engineering_range:
-      - 0.0
-      - 120000.0
-      post_gain: 1.0
-      post_offset: 0.0
-      calibration_id: SYNTHETIC_EXAMPLE_ONLY
       shunt_id: R3
       shunt_ohm: 250.0
       signal_range_ma:
       - 4.0
       - 20.0
-  - name: rh_ambient_pct
+  - name: rh_air_out
     unit: percent_RH
     physical: cDAQ1Mod2/ai3
     negative_input: ai11
     daq_range_v:
     - -10.0
     - 10.0
-    source_note: Quotation says 0-99.9% RH; verify transmitter scaling endpoints.
+    source_note: Outlet air relative humidity transmitter (Changor T/RH model, 4-20 mA over shunt R4);
+      verify range endpoints.
     scale:
       kind: current_loop
       confirmed: true
@@ -150,14 +151,60 @@ analog:
       signal_range_ma:
       - 4.0
       - 20.0
-  - name: dp_air_duct_pa
+  - name: p_atm_pa
     unit: Pa
     physical: cDAQ1Mod2/ai4
     negative_input: ai12
     daq_range_v:
     - -10.0
     - 10.0
-    source_note: Air differential pressure transmitter (4-20 mA over shunt R5); verify
+    source_note: Quoted available analog/RS485 variants; confirm actual 4-20 mA absolute-pressure
+      variant over shunt R5.
+    scale:
+      kind: current_loop
+      confirmed: true
+      engineering_range:
+      - 0.0
+      - 120000.0
+      post_gain: 1.0
+      post_offset: 0.0
+      calibration_id: SYNTHETIC_EXAMPLE_ONLY
+      shunt_id: R5
+      shunt_ohm: 250.0
+      signal_range_ma:
+      - 4.0
+      - 20.0
+  - name: rh_ambient_pct
+    unit: percent_RH
+    physical: cDAQ1Mod2/ai5
+    negative_input: ai13
+    daq_range_v:
+    - -10.0
+    - 10.0
+    source_note: Ambient relative humidity transmitter (4-20 mA over shunt R6); verify
+      transmitter scaling endpoints.
+    scale:
+      kind: current_loop
+      confirmed: true
+      engineering_range:
+      - 0.0
+      - 100.0
+      post_gain: 1.0
+      post_offset: 0.0
+      calibration_id: SYNTHETIC_EXAMPLE_ONLY
+      shunt_id: R6
+      shunt_ohm: 250.0
+      signal_range_ma:
+      - 4.0
+      - 20.0
+  - name: dp_air_duct_pa
+    unit: Pa
+    physical: cDAQ1Mod2/ai6
+    negative_input: ai14
+    daq_range_v:
+    - -10.0
+    - 10.0
+    source_note: Air differential pressure transmitter (4-20 mA over shunt R7); verify
       range endpoints.
     scale:
       kind: current_loop
@@ -168,35 +215,15 @@ analog:
       post_gain: 1.0
       post_offset: 0.0
       calibration_id: SYNTHETIC_EXAMPLE_ONLY
-      shunt_id: R5
+      shunt_id: R7
       shunt_ohm: 250.0
       signal_range_ma:
       - 4.0
       - 20.0
-  - name: level_water_m
-    unit: m
-    physical: cDAQ1Mod2/ai5
-    negative_input: ai13
-    daq_range_v:
-    - -10.0
-    - 10.0
-    source_note: Tank water level transmitter (0-10 V linear); verify range endpoints.
-    scale:
-      kind: voltage_linear
-      confirmed: true
-      engineering_range:
-      - 0.0
-      - 2.0
-      post_gain: 1.0
-      post_offset: 0.0
-      calibration_id: SYNTHETIC_EXAMPLE_ONLY
-      signal_range_v:
-      - 0.0
-      - 10.0
   - name: power_motor_w
     unit: W
-    physical: cDAQ1Mod2/ai6
-    negative_input: ai14
+    physical: cDAQ1Mod2/ai7
+    negative_input: ai15
     daq_range_v:
     - -10.0
     - 10.0

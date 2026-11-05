@@ -71,8 +71,8 @@ class SimAnalog(Worker):
                 values = base + 0.2*np.sin(times/15)[None, :] + self.rng.normal(0, .015, (4,n))
             else:
                 # Synthetic VOLTAGES: no fictitious sensor specifications are used here.
-                base = np.array([2.92, 2.75, 3.47, 3.6, 1.6, 5.5, 4.2])[:, None]
-                values = base + .012*np.sin(times/7)[None, :] + self.rng.normal(0, .001, (7,n))
+                base = np.array([2.92, 2.80, 2.75, 3.20, 3.47, 3.60, 1.60, 4.20])[:, None]
+                values = base + .012*np.sin(times/7)[None, :] + self.rng.normal(0, .001, (8,n))
             self.publish(out, AnalogBlock(self.name,index,rate,t0,clock.elapsed(),values,True))
             index += n
             self.outcome.samples_per_channel = index

@@ -15,8 +15,8 @@ ROOT_KEYS = {"schema_version", "simulation_only", "run", "hardware", "checks",
              "sampling", "rtd", "analog", "counter", "storage"}
 DEFAULT_RTD_NAMES = ("t_water_in_c", "t_water_out_c", "t_water_level_quarter_c", "t_water_level_three_quarters_c")
 RTD_NAMES = DEFAULT_RTD_NAMES
-DEFAULT_ANALOG_NAMES = ("t_air_in_c", "t_air_out_c", "p_atm_pa", "rh_ambient_pct",
-                        "dp_air_duct_pa", "level_water_m", "power_motor_w")
+DEFAULT_ANALOG_NAMES = ("t_air_in_c", "rh_air_in", "t_air_out_c", "rh_air_out",
+                        "p_atm_pa", "rh_ambient_pct", "dp_air_duct_pa", "power_motor_w")
 ANALOG_NAMES = DEFAULT_ANALOG_NAMES
 DEFAULT_COUNTER_NAMES = ("water_flow_in", "water_flow_out", "impeller_rpm")
 COUNTER_NAMES = DEFAULT_COUNTER_NAMES
@@ -89,8 +89,8 @@ def validate(cfg: dict[str, Any], *, backend: str = "sim", raw_only: bool = Fals
             raise ConfigError("This design requires DIFFERENTIAL analog inputs")
         if len(rtd) != 4:
             raise ConfigError(f"Four RTD channels are required, got {len(rtd)}")
-        if len(analog) != 7:
-            raise ConfigError(f"Seven analog channels are required, got {len(analog)}")
+        if len(analog) != 8:
+            raise ConfigError(f"Eight analog channels are required, got {len(analog)}")
         for i, ch in enumerate(rtd):
             name = ch.get("name")
             if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,49}", name):
@@ -104,7 +104,7 @@ def validate(cfg: dict[str, Any], *, backend: str = "sim", raw_only: bool = Fals
             if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,49}", name):
                 raise ConfigError(f"analog[{i}].name: use 1-50 ASCII letters, digits or '_', starting with a letter")
             if ch["physical"] != f"{hw['analog_module']}/ai{i}" or ch["negative_input"] != f"ai{i+8}":
-                raise ConfigError("NI-9204 differential pairs must be ai0/ai8 through ai6/ai14")
+                raise ConfigError("NI-9204 differential pairs must be ai0/ai8 through ai7/ai15")
             lo, hi = pair(ch["daq_range_v"], f"{ch['name']}.daq_range_v")
             if (lo, hi) not in {(-10., 10.), (-5., 5.), (-1., 1.), (-0.2, 0.2)}:
                 raise ConfigError("Use an NI-9204 supported symmetric voltage range")

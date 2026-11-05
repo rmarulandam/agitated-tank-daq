@@ -2,7 +2,7 @@
 
 ## measurements.sqlite
 
-`channels` stores the channel name, stream (`rtd`, `analog`, or `counter`), physical channel, unit and the exact channel definition JSON. `samples` stores the four RTD and seven analog channels in long form. Its primary key is `(stream, sample_index, channel)`. Within each stream the writer enforces contiguous block indices.
+`channels` stores the channel name, stream (`rtd`, `analog`, or `counter`), physical channel, unit and the exact channel definition JSON. `samples` stores the four RTD and eight analog channels in long form. Its primary key is `(stream, sample_index, channel)`. Within each stream the writer enforces contiguous block indices.
 
 The `channel` field in `samples` matches the channel `name` in the `channels` table. `raw_value` is V for NI-9204, and **DAQmx-linearized degC** for NI-9217. No resistance or ADC-code capture is claimed. `value` contains an engineering conversion, or SQL NULL when scaling is unconfirmed/raw-only. RTD configured gain and offset are applied on top of the DAQmx temperature. `raw_value` remains unchanged. NaN/infinite inputs are stored as NULL with `NONFINITE_INPUT`, rather than ambiguous nonstandard JSON/SQLite NaNs.
 

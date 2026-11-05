@@ -82,7 +82,7 @@ rtd:
 analog:
   terminal_configuration: DIFFERENTIAL
   channels:
-  # ai0: Inlet air temperature (4-20 mA across measured precision shunt R1)
+  # ai0: Inlet air temperature (Changor T/RH model, 4-20 mA across measured precision shunt R1)
   - name: t_air_in_c
     unit: degC
     physical: cDAQ1Mod2/ai0
@@ -90,7 +90,7 @@ analog:
     daq_range_v:
     - -10.0
     - 10.0
-    source_note: Inlet air temperature transmitter (4-20 mA over measured shunt R1).
+    source_note: Inlet air temperature transmitter (Changor T/RH model, 4-20 mA over measured shunt R1).
     scale:
       kind: current_loop
       confirmed: true
@@ -106,15 +106,39 @@ analog:
       - 4.0
       - 20.0
 
-  # ai1: Outlet air temperature (4-20 mA across measured precision shunt R2)
-  - name: t_air_out_c
-    unit: degC
+  # ai1: Inlet air relative humidity (Changor T/RH model, 4-20 mA across measured precision shunt R2)
+  - name: rh_air_in
+    unit: percent_RH
     physical: cDAQ1Mod2/ai1
     negative_input: ai9
     daq_range_v:
     - -10.0
     - 10.0
-    source_note: Outlet air temperature transmitter (4-20 mA over measured shunt R2).
+    source_note: Inlet air relative humidity transmitter (Changor T/RH model, 4-20 mA over measured shunt R2).
+    scale:
+      kind: current_loop
+      confirmed: true
+      engineering_range:
+      - 0.0
+      - 100.0
+      post_gain: 1.0
+      post_offset: 0.0
+      calibration_id: CAL-2026-RHAIR-IN
+      shunt_id: R2
+      shunt_ohm: 250.12
+      signal_range_ma:
+      - 4.0
+      - 20.0
+
+  # ai2: Outlet air temperature (Changor T/RH model, 4-20 mA across measured precision shunt R3)
+  - name: t_air_out_c
+    unit: degC
+    physical: cDAQ1Mod2/ai2
+    negative_input: ai10
+    daq_range_v:
+    - -10.0
+    - 10.0
+    source_note: Outlet air temperature transmitter (Changor T/RH model, 4-20 mA over measured shunt R3).
     scale:
       kind: current_loop
       confirmed: true
@@ -124,21 +148,45 @@ analog:
       post_gain: 1.0
       post_offset: 0.0
       calibration_id: CAL-2026-TAIR-OUT
-      shunt_id: R2
-      shunt_ohm: 250.12
+      shunt_id: R3
+      shunt_ohm: 249.95
       signal_range_ma:
       - 4.0
       - 20.0
 
-  # ai2: Atmospheric pressure (4-20 mA absolute pressure variant across shunt R3)
-  - name: p_atm_pa
-    unit: Pa
-    physical: cDAQ1Mod2/ai2
-    negative_input: ai10
+  # ai3: Outlet air relative humidity (Changor T/RH model, 4-20 mA across measured precision shunt R4)
+  - name: rh_air_out
+    unit: percent_RH
+    physical: cDAQ1Mod2/ai3
+    negative_input: ai11
     daq_range_v:
     - -10.0
     - 10.0
-    source_note: Barometric absolute pressure transmitter (4-20 mA over measured shunt R3).
+    source_note: Outlet air relative humidity transmitter (Changor T/RH model, 4-20 mA over measured shunt R4).
+    scale:
+      kind: current_loop
+      confirmed: true
+      engineering_range:
+      - 0.0
+      - 100.0
+      post_gain: 1.0
+      post_offset: 0.0
+      calibration_id: CAL-2026-RHAIR-OUT
+      shunt_id: R4
+      shunt_ohm: 250.08
+      signal_range_ma:
+      - 4.0
+      - 20.0
+
+  # ai4: Atmospheric pressure (4-20 mA absolute pressure variant across shunt R5)
+  - name: p_atm_pa
+    unit: Pa
+    physical: cDAQ1Mod2/ai4
+    negative_input: ai12
+    daq_range_v:
+    - -10.0
+    - 10.0
+    source_note: Barometric absolute pressure transmitter (4-20 mA over measured shunt R5).
     scale:
       kind: current_loop
       confirmed: true
@@ -148,21 +196,21 @@ analog:
       post_gain: 1.0
       post_offset: 0.0
       calibration_id: CAL-2026-PATM-01
-      shunt_id: R3
-      shunt_ohm: 249.95
+      shunt_id: R5
+      shunt_ohm: 249.90
       signal_range_ma:
       - 4.0
       - 20.0
 
-  # ai3: Ambient relative humidity (4-20 mA across measured shunt R4)
+  # ai5: Ambient relative humidity (4-20 mA across measured shunt R6)
   - name: rh_ambient_pct
     unit: percent_RH
-    physical: cDAQ1Mod2/ai3
-    negative_input: ai11
+    physical: cDAQ1Mod2/ai5
+    negative_input: ai13
     daq_range_v:
     - -10.0
     - 10.0
-    source_note: Ambient relative humidity transmitter (4-20 mA over measured shunt R4).
+    source_note: Ambient relative humidity transmitter (4-20 mA over measured shunt R6).
     scale:
       kind: current_loop
       confirmed: true
@@ -172,21 +220,21 @@ analog:
       post_gain: 1.0
       post_offset: 0.0
       calibration_id: CAL-2026-RH-01
-      shunt_id: R4
-      shunt_ohm: 250.08
+      shunt_id: R6
+      shunt_ohm: 250.05
       signal_range_ma:
       - 4.0
       - 20.0
 
-  # ai4: Air duct differential pressure (4-20 mA across measured shunt R5)
+  # ai6: Air duct differential pressure (4-20 mA across measured shunt R7)
   - name: dp_air_duct_pa
     unit: Pa
-    physical: cDAQ1Mod2/ai4
-    negative_input: ai12
+    physical: cDAQ1Mod2/ai6
+    negative_input: ai14
     daq_range_v:
     - -10.0
     - 10.0
-    source_note: Air differential pressure transmitter (4-20 mA over measured shunt R5).
+    source_note: Air differential pressure transmitter (4-20 mA over measured shunt R7).
     scale:
       kind: current_loop
       confirmed: true
@@ -196,39 +244,17 @@ analog:
       post_gain: 1.0
       post_offset: 0.0
       calibration_id: CAL-2026-DPAIR-01
-      shunt_id: R5
-      shunt_ohm: 249.90
+      shunt_id: R7
+      shunt_ohm: 249.88
       signal_range_ma:
       - 4.0
       - 20.0
 
-  # ai5: Tank water level (0-10 V linear voltage transmitter)
-  - name: level_water_m
-    unit: m
-    physical: cDAQ1Mod2/ai5
-    negative_input: ai13
-    daq_range_v:
-    - -10.0
-    - 10.0
-    source_note: Tank water level hydrostatic transmitter (0-10 V linear).
-    scale:
-      kind: voltage_linear
-      confirmed: true
-      engineering_range:
-      - 0.0
-      - 2.0
-      post_gain: 1.0
-      post_offset: 0.0
-      calibration_id: CAL-2026-LEVEL-01
-      signal_range_v:
-      - 0.0
-      - 10.0
-
-  # ai6: Motor electrical power (0-10 V linear transducer)
+  # ai7: Motor electrical power (0-10 V linear transducer)
   - name: power_motor_w
     unit: W
-    physical: cDAQ1Mod2/ai6
-    negative_input: ai14
+    physical: cDAQ1Mod2/ai7
+    negative_input: ai15
     daq_range_v:
     - -10.0
     - 10.0

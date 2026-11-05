@@ -3,7 +3,7 @@
 A text-based, **acquisition-only** Python application for the agreed experimental rig:
 
 - cDAQ-9173 with NI-9217: four 4-wire PT100 water temperatures (`t_water_in_c`, `t_water_out_c`, `t_water_level_quarter_c`, `t_water_level_three_quarters_c`).
-- NI-9204: seven differential voltage channels, including five 250-ohm shunts (`t_air_in_c`, `t_air_out_c`, `p_atm_pa`, `rh_ambient_pct`, `dp_air_duct_pa`) and two 0–10 V linear channels (`level_water_m`, `power_motor_w`).
+- NI-9204: eight differential voltage channels, including seven 250-ohm shunts (`t_air_in_c`, `rh_air_in`, `t_air_out_c`, `rh_air_out`, `p_atm_pa`, `rh_ambient_pct`, `dp_air_duct_pa`) and one 0–10 V linear channel (`power_motor_w`).
 - NI-9411 or NI-9401: three pulse-counter channels (`water_flow_in`, `water_flow_out`, `impeller_rpm`) routed to chassis counters (`ctr0`, `ctr1`, `ctr2`).
 
 The NI backend uses NI's `nidaqmx` Python API and the separately installed NI-DAQmx driver. The simulator needs neither NI hardware nor the NI driver.
@@ -77,7 +77,7 @@ The software enforces the **physical module and terminal topology**, while chann
 
 - **Slot 1: NI-9217 (4-wire RTD)**: Exactly 4 channels on physical inputs `ai0` through `ai3`.
   - Raw values: Linearized degrees Celsius from DAQmx.
-- **Slot 2: NI-9204 (Differential Voltage / Current Loops)**: Exactly 7 differential pairs on `ai0/ai8` through `ai6/ai14` (`ai7/ai15` unused).
+- **Slot 2: NI-9204 (Differential Voltage / Current Loops)**: Exactly 8 differential pairs on `ai0/ai8` through `ai7/ai15`.
   - Raw values: Measured voltage (V) across differential inputs (or across shunt resistors for 4–20 mA loops).
 - **Slot 3: NI-9411 or NI-9401 (Digital Counter)**: Three digital input terminals (e.g. `PFI0`, `PFI1`, `PFI2`) routed to chassis counter resources (e.g. `ctr0`, `ctr1`, `ctr2`).
   - Raw values: Cumulative hardware pulse count per channel.
@@ -94,18 +94,19 @@ The table below illustrates the default template included with `configs/rig.yaml
 | RTD | `cDAQ1Mod1/ai1` | 4-wire connection | `t_water_out_c` | Water outlet temperature |
 | RTD | `cDAQ1Mod1/ai2` | 4-wire connection | `t_water_level_quarter_c` | Tank water temperature at 1/4 level |
 | RTD | `cDAQ1Mod1/ai3` | 4-wire connection | `t_water_level_three_quarters_c` | Tank water temperature at 3/4 level |
-| Analog | `cDAQ1Mod2/ai0` | `AI8` | `t_air_in_c` | Inlet air temperature (4–20 mA, shunt R1) |
-| Analog | `cDAQ1Mod2/ai1` | `AI9` | `t_air_out_c` | Outlet air temperature (4–20 mA, shunt R2) |
-| Analog | `cDAQ1Mod2/ai2` | `AI10` | `p_atm_pa` | Barometric pressure (4–20 mA, shunt R3) |
-| Analog | `cDAQ1Mod2/ai3` | `AI11` | `rh_ambient_pct` | Ambient relative humidity (4–20 mA, shunt R4) |
-| Analog | `cDAQ1Mod2/ai4` | `AI12` | `dp_air_duct_pa` | Air differential pressure (4–20 mA, shunt R5) |
-| Analog | `cDAQ1Mod2/ai5` | `AI13` | `level_water_m` | Tank water level (0–10 V voltage linear) |
-| Analog | `cDAQ1Mod2/ai6` | `AI14` | `power_motor_w` | Motor electrical power (0–10 V voltage linear) |
+| Analog | `cDAQ1Mod2/ai0` | `AI8` | `t_air_in_c` | Inlet air temperature (Changor T/RH model, 4–20 mA, shunt R1) |
+| Analog | `cDAQ1Mod2/ai1` | `AI9` | `rh_air_in` | Inlet air relative humidity (Changor T/RH model, 4–20 mA, shunt R2) |
+| Analog | `cDAQ1Mod2/ai2` | `AI10` | `t_air_out_c` | Outlet air temperature (Changor T/RH model, 4–20 mA, shunt R3) |
+| Analog | `cDAQ1Mod2/ai3` | `AI11` | `rh_air_out` | Outlet air relative humidity (Changor T/RH model, 4–20 mA, shunt R4) |
+| Analog | `cDAQ1Mod2/ai4` | `AI12` | `p_atm_pa` | Barometric pressure (4–20 mA, shunt R5) |
+| Analog | `cDAQ1Mod2/ai5` | `AI13` | `rh_ambient_pct` | Ambient relative humidity (4–20 mA, shunt R6) |
+| Analog | `cDAQ1Mod2/ai6` | `AI14` | `dp_air_duct_pa` | Air differential pressure (4–20 mA, shunt R7) |
+| Analog | `cDAQ1Mod2/ai7` | `AI15` | `power_motor_w` | Motor electrical power (0–10 V voltage linear) |
 | Counter | `cDAQ1Mod3/ctr0` | source `/cDAQ1Mod3/PFI0` | `water_flow_in` | Water inlet flow pulses (Hall sensor) |
 | Counter | `cDAQ1Mod3/ctr1` | source `/cDAQ1Mod3/PFI1` | `water_flow_out` | Water outlet flow pulses (Hall sensor) |
 | Counter | `cDAQ1Mod3/ctr2` | source `/cDAQ1Mod3/PFI2` | `impeller_rpm` | Axis impeller revolutions (pulse tachometer) |
 
-The NI-9204 is explicitly configured as `DIFF`. Its negative inputs are paired differential returns and are not added as extra DAQ channels; `ai7/ai15` remains unused. In the template configuration, R1–R5 are associated with the five current-loop channels (`ai0` through `ai4`); the two 0–10 V channels (`ai5` for water level in `m` and `ai6` for motor electrical power in `W`) are configured with `scale.kind: voltage_linear` and connect directly without a shunt. The unused fourth chassis slot remains unused.
+The NI-9204 is explicitly configured as `DIFF`. Its negative inputs are paired differential returns (`AI8` through `AI15`) and are not added as extra DAQ channels; all eight differential channels (`ai0/ai8` through `ai7/ai15`) are utilized. In the template configuration, Changor transmitter models provide two distinct outputs (temperature and relative humidity) for both inlet air (`t_air_in_c` on `ai0/ai8`, `rh_air_in` on `ai1/ai9`) and outlet air (`t_air_out_c` on `ai2/ai10`, `rh_air_out` on `ai3/ai11`). R1–R7 are associated with the seven current-loop channels (`ai0` through `ai6`); the 0–10 V channel (`ai7` for motor electrical power in `W`) is configured with `scale.kind: voltage_linear` and connects directly without a shunt. Tank water level (`level_water_m`) is no longer included. The unused fourth chassis slot remains unused.
 
 Each counter channel's resource is selected explicitly under `counter.channels`; `tankdaq devices` lists the available counter names and PFI terminals. If your installation enumerates counters under the chassis rather than the module, set each channel's `physical` field to the exact listed resource (e.g. `cDAQ1/ctr0`, `cDAQ1/ctr1`, `cDAQ1/ctr2`). Keep each `pulse_terminal` pointed at the physical NI-9411 or NI-9401 input (`PFI0`, `PFI1`, `PFI2`). Resource existence is checked first; DAQmx task commit validates the routes. The software never substitutes another input automatically.
 

@@ -4,12 +4,13 @@ t_water_out_c,cDAQ1Mod1/ai1,TL4050 PT100 4-wire,SN-48102,CAL-2026-PT100-02,2026-
 t_water_level_quarter_c,cDAQ1Mod1/ai2,TL4050 PT100 4-wire,SN-48103,CAL-2026-PT100-03,2026-10-15,CAL-2026-PT100-03.pdf,PT_3851 standard curve (gain=1.0 offset=0.00 C),Ice bath & thermal well verification
 t_water_level_three_quarters_c,cDAQ1Mod1/ai3,TL4050 PT100 4-wire,SN-48104,CAL-2026-PT100-04,2026-10-15,CAL-2026-PT100-04.pdf,PT_3851 standard curve (gain=1.0 offset=0.01 C),Ice bath & thermal well verification
 t_air_in_c,cDAQ1Mod2/ai0,Changor Temp/RH Transmitter,SN-2026-A1,CAL-2026-TAIR-IN,2026-10-20,CAL-2026-TAIR-IN.pdf,4-20 mA across R1 (249.85 ohm) -> -20 to 80 C,Calibrated temperature loop
-t_air_out_c,cDAQ1Mod2/ai1,Changor Temp/RH Transmitter,SN-2026-A2,CAL-2026-TAIR-OUT,2026-10-20,CAL-2026-TAIR-OUT.pdf,4-20 mA across R2 (250.12 ohm) -> -20 to 80 C,Calibrated temperature loop
-p_atm_pa,cDAQ1Mod2/ai2,Absolute Pressure Transmitter,SN-78411,CAL-2026-PATM-01,2026-10-18,CAL-2026-PATM-01.pdf,4-20 mA across R3 (249.95 ohm) -> 0 to 120 kPa,Barometric reference verified
-rh_ambient_pct,cDAQ1Mod2/ai3,Changor Temp/RH Transmitter,SN-2026-RH,CAL-2026-RH-01,2026-10-20,CAL-2026-RH-01.pdf,4-20 mA across R4 (250.08 ohm) -> 0 to 100% RH,Chamber saturated salt comparison
-dp_air_duct_pa,cDAQ1Mod2/ai4,Air DP Transmitter,SN-DP-302,CAL-2026-DPAIR-01,2026-10-19,CAL-2026-DPAIR-01.pdf,4-20 mA across R5 (249.90 ohm) -> 0 to 3000 Pa,Micromanometer 3-point check
-level_water_m,cDAQ1Mod2/ai5,Hydrostatic Level Sensor,SN-LVL-109,CAL-2026-LEVEL-01,2026-10-22,CAL-2026-LEVEL-01.pdf,0-10 V linear -> 0.0 to 2.0 m water,Sight glass physical calibration
-power_motor_w,cDAQ1Mod2/ai6,Electric Power Transducer,SN-PWR-550,CAL-2026-PWR-01,2026-10-22,CAL-2026-PWR-01.pdf,0-10 V linear -> 0.0 to 1500.0 W,Precision power analyzer reference
+rh_air_in,cDAQ1Mod2/ai1,Changor Temp/RH Transmitter,SN-2026-A1,CAL-2026-RHAIR-IN,2026-10-20,CAL-2026-RHAIR-IN.pdf,4-20 mA across R2 (250.12 ohm) -> 0 to 100% RH,Chamber saturated salt comparison
+t_air_out_c,cDAQ1Mod2/ai2,Changor Temp/RH Transmitter,SN-2026-A2,CAL-2026-TAIR-OUT,2026-10-20,CAL-2026-TAIR-OUT.pdf,4-20 mA across R3 (249.95 ohm) -> -20 to 80 C,Calibrated temperature loop
+rh_air_out,cDAQ1Mod2/ai3,Changor Temp/RH Transmitter,SN-2026-A2,CAL-2026-RHAIR-OUT,2026-10-20,CAL-2026-RHAIR-OUT.pdf,4-20 mA across R4 (250.08 ohm) -> 0 to 100% RH,Chamber saturated salt comparison
+p_atm_pa,cDAQ1Mod2/ai4,Absolute Pressure Transmitter,SN-78411,CAL-2026-PATM-01,2026-10-18,CAL-2026-PATM-01.pdf,4-20 mA across R5 (249.90 ohm) -> 0 to 120 kPa,Barometric reference verified
+rh_ambient_pct,cDAQ1Mod2/ai5,Ambient Temp/RH Transmitter,SN-2026-RH,CAL-2026-RH-01,2026-10-20,CAL-2026-RH-01.pdf,4-20 mA across R6 (250.05 ohm) -> 0 to 100% RH,Chamber saturated salt comparison
+dp_air_duct_pa,cDAQ1Mod2/ai6,Air DP Transmitter,SN-DP-302,CAL-2026-DPAIR-01,2026-10-19,CAL-2026-DPAIR-01.pdf,4-20 mA across R7 (249.88 ohm) -> 0 to 3000 Pa,Micromanometer 3-point check
+power_motor_w,cDAQ1Mod2/ai7,Electric Power Transducer,SN-PWR-550,CAL-2026-PWR-01,2026-10-22,CAL-2026-PWR-01.pdf,0-10 V linear -> 0.0 to 1500.0 W,Precision power analyzer reference
 water_flow_in,cDAQ1Mod3/ctr0,G1-1/2 Hall Turbine Flowmeter,SN-FLW-01,CAL-2026-FLOW-IN,2026-10-21,CAL-2026-FLOW-IN.pdf,F = 0.5 * Q (0.5 Hz per L/min) -> 5 to 150 L/min,Bucket & stopwatch gravimetric test
 water_flow_out,cDAQ1Mod3/ctr1,G1-1/2 Hall Turbine Flowmeter,SN-FLW-02,CAL-2026-FLOW-OUT,2026-10-21,CAL-2026-FLOW-OUT.pdf,F = 0.5 * Q (0.5 Hz per L/min) -> 5 to 150 L/min,Bucket & stopwatch gravimetric test
 impeller_rpm,cDAQ1Mod3/ctr2,Optical Tachometer 60-pulse disc,SN-TACH-01,CAL-2026-TACH-01,2026-10-22,CAL-2026-TACH-01.pdf,hz_per_unit = 1.0 (60 pulses/rev) -> 10 to 600 RPM,Stroboscope optical verification

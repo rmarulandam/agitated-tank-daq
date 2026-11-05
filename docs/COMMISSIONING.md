@@ -22,7 +22,7 @@ Complete these steps on the host PC before connecting field instrumentation:
   ```
 - [ ] **Verify Chassis & Module Detection (NI MAX):** Connect the cDAQ-9173 via USB, open NI MAX, and verify all modules appear under **Devices and Interfaces**:
   - Slot 1: NI-9217 (4-channel RTD)
-  - Slot 2: NI-9204 (7 differential analog voltage channels)
+  - Slot 2: NI-9204 (8 differential analog voltage channels)
   - Slot 3: NI-9411 or NI-9401 (3 digital counter inputs)
 - [ ] **Generate Python Hardware Inventory:**
   ```powershell
@@ -55,15 +55,16 @@ Keep agitator motor, valves, and heater **physically locked out and unpowered** 
 - [ ] **Acquisition Range:** Note that the temperature interval in the configuration is a requested acquisition interval.
 
 ### 1.3 Differential Voltage & Shunt Resistors (`wiring_verified`)
-- [ ] **Differential Pairs:** Wire analog inputs to the NI-9204 as differential pairs (`ai0/ai8` through `ai6/ai14`). Unused `ai7/ai15` must remain disconnected.
-- [ ] **Measure Shunt Resistors ($R_1$–$R_5$):** Measure each 250 $\Omega$ precision current-loop shunt resistor (`ai0` through `ai4`) with a calibrated bench multimeter. Record the exact measured resistance under `shunt_ohm` in `configs/rig.local.yaml` (do not rely on nominal 250.0 $\Omega$ tolerance).
+- [ ] **Differential Pairs:** Wire analog inputs to the NI-9204 as differential pairs (`ai0/ai8` through `ai7/ai15`). All 8 differential pairs are utilized.
+- [ ] **Measure Shunt Resistors ($R_1$–$R_7$):** Measure each 250 $\Omega$ precision current-loop shunt resistor (`ai0` through `ai6`) with a calibrated bench multimeter. Record the exact measured resistance under `shunt_ohm` in `configs/rig.local.yaml` (do not rely on nominal 250.0 $\Omega$ tolerance).
 - [ ] **Current-Loop Burden Compliance:** Verify loop power supplies provide sufficient compliance voltage across the 250 $\Omega$ burden and sensor drops. (The software reads voltage across these shunts).
 - [ ] **Transmitter Output Verification:**
-  - **Air In / Out Temperature Transmitters (`ai0`, `ai1`):** Confirm 4–20 mA current loop wiring across shunts $R_1$ and $R_2$ and verify configured temperature range endpoints.
-  - **Barometric Pressure Transmitter (`ai2`):** Confirm the unit is the 4–20 mA analog variant across shunt $R_3$. (A delivered RS485-only transmitter requires separate hardware/software integration).
-  - **Ambient Relative Humidity Transmitter (`ai3`):** Confirm 4–20 mA current loop wiring across shunt $R_4$ and verify RH scaling endpoints.
-  - **Air Differential Pressure Transmitter (`ai4`):** Confirm differential pressure ports/polarity and 4–20 mA loop wiring across shunt $R_5$.
-  - **Tank Water Level & Motor Electrical Power (`ai5`, `ai6`):** Confirm 0–10 V linear voltage outputs and verify level (`m`) and power (`W`) scaling endpoints.
+  - **Inlet Air Temp & RH Transmitters (`ai0`, `ai1`):** Confirm 4–20 mA current loop wiring across shunts $R_1$ and $R_2$ for the inlet Changor model; verify temperature and RH scaling endpoints.
+  - **Outlet Air Temp & RH Transmitters (`ai2`, `ai3`):** Confirm 4–20 mA current loop wiring across shunts $R_3$ and $R_4$ for the outlet Changor model; verify temperature and RH scaling endpoints.
+  - **Barometric Pressure Transmitter (`ai4`):** Confirm the unit is the 4–20 mA analog variant across shunt $R_5$. (A delivered RS485-only transmitter requires separate hardware/software integration).
+  - **Ambient Relative Humidity Transmitter (`ai5`):** Confirm 4–20 mA current loop wiring across shunt $R_6$ and verify RH scaling endpoints.
+  - **Air Differential Pressure Transmitter (`ai6`):** Confirm differential pressure ports/polarity and 4–20 mA loop wiring across shunt $R_7$.
+  - **Motor Electrical Power (`ai7`):** Confirm 0–10 V linear voltage output and verify power (`W`) scaling endpoints.
 
 ### 1.4 Digital Counters: Water Flow & Impeller RPM (`hall_logic_verified`)
 - [ ] **Module Support:** Verify the digital module is either an NI-9411 or NI-9401.
@@ -76,7 +77,7 @@ Keep agitator motor, valves, and heater **physically locked out and unpowered** 
 
 Before connecting installed plant transmitters, test each channel with reference sources where available:
 
-- [ ] **Voltage & Current Loops:** Inject known test signals (e.g. 4 mA, 12 mA, 20 mA across the measured 250 $\Omega$ shunts to observe ~1 V, 3 V, 5 V; and 0–10 V on `ai5`/`ai6`). Record deviations.
+- [ ] **Voltage & Current Loops:** Inject known test signals (e.g. 4 mA, 12 mA, 20 mA across the measured 250 $\Omega$ shunts to observe ~1 V, 3 V, 5 V; and 0–10 V on `ai7`). Record deviations.
 - [ ] **RTDs:** Connect a precision decade box or reference RTD; confirm stable, plausible temperature readings in degrees Celsius.
 - [ ] **Pulse Counters:** Inject a known pulse frequency (e.g. 10–50 Hz TTL) into each counter channel; confirm counts increment monotonically and frequency calculation matches the input.
 - [ ] **Signal Loss Check:** Disconnect pulse signals; verify frequency decays to zero after the rolling window clears and quality flags `NO_PULSES_FLOW_OR_SIGNAL_LOSS`.
@@ -111,7 +112,7 @@ checks:
   .\.venv\Scripts\python.exe -m tankdaq inspect "$run"
   ```
 - [ ] **Verify Raw Data Behavior:**
-  - All seven analog voltages (V) and all three counter pulse counts/frequencies are logged.
+  - All eight analog voltages (V) and all three counter pulse counts/frequencies are logged.
   - Transmitter engineering values and counter engineering values (`L/min`, `rpm`) remain `null` (raw-only mode prevents applying unverified equations).
   - RTD temperatures remain available because the NI-9217 returns DAQmx-linearized degrees Celsius.
 
@@ -144,10 +145,10 @@ Once raw signals are validated, establish each sensor's mathematical transfer fu
 > **No Clipping:** Values are deliberately never clipped at configured endpoints, preserving overrange evidence. Out-of-range signals receive quality flags (`AT_DAQ_LIMIT`, `OUTSIDE_NOMINAL_SIGNAL`, `OUTSIDE_SENSOR_FLOW_RANGE`).
 
 ### 4.2 Confirmation Checklist
-- [ ] **Measured Shunt Resistance:** Enter exact measured ohms under `shunt_ohm` for each current loop (`R1`–`R5`).
-- [ ] **Limits:** Enter verified minimum/maximum physical endpoints ($Y_{\min}$, $Y_{\max}$) using standard units (`degC`, `Pa`, `percent_RH`, `m`, `W`).
+- [ ] **Measured Shunt Resistance:** Enter exact measured ohms under `shunt_ohm` for each current loop (`R1`–`R7`).
+- [ ] **Limits:** Enter verified minimum/maximum physical endpoints ($Y_{\min}$, $Y_{\max}$) using standard units (`degC`, `Pa`, `percent_RH`, `W`).
 - [ ] **Counter Calibrations:** Confirm the actual `hz_per_unit` coefficients for `water_flow_in`, `water_flow_out`, and `impeller_rpm`.
-- [ ] **Confirm Scales:** Set `scale.confirmed: true` on all 7 analog channels and `calibration_confirmed: true` on all 3 counter channels.
+- [ ] **Confirm Scales:** Set `scale.confirmed: true` on all 8 analog channels and `calibration_confirmed: true` on all 3 counter channels.
 - [ ] **Record Provenance:** Enter a meaningful `calibration_id` or datasheet reference for each confirmed channel. In this application, *confirmed* means the transfer function is established.
 - [ ] **Store Calibration Certificates:** Store digital certificates, factory inspection sheets, or measurement logs in [`docs/calibrations/`](calibrations/README.md) and record their file path and metadata in [`docs/calibrations/CAL-INDEX.csv`](calibrations/CAL-INDEX.csv). Binary assets (PDFs, scans, images) in `docs/calibrations/` are tracked via **Git Large File Storage (Git LFS)** as defined in [`.gitattributes`](../.gitattributes). Run `git lfs install` before adding large files.
 

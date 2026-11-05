@@ -24,7 +24,7 @@ def completed(tmp_path,demo,demo_path):
 def test_run_data_integrity(completed):
     info=inspect_run(completed)
     assert info['integrity']=='ok'
-    assert len(info['channel_samples'])==11
+    assert len(info['channel_samples'])==12
     assert len(info['counter_channels'])==3
     assert {c['channel'] for c in info['counter_channels']}=={'water_flow_in','water_flow_out','impeller_rpm'}
     assert info['counter_polls']>=1
@@ -57,7 +57,7 @@ def test_notes(completed):
 def test_monitor_once(completed,capsys):
     watch(completed,once=True)
     out=capsys.readouterr().out
-    for expected in ('t_water_in_c','t_air_in_c','level_water_m','power_motor_w','water_flow_in','water_flow_out','impeller_rpm'):
+    for expected in ('t_water_in_c','t_air_in_c','rh_air_in','t_air_out_c','rh_air_out','power_motor_w','water_flow_in','water_flow_out','impeller_rpm'):
         assert expected in out
 
 def test_export_refuses_running(completed):
@@ -88,7 +88,7 @@ def test_raw_only_run(tmp_path,demo,demo_path):
 
 def test_sample_index_gaps_rejected(tmp_path,demo):
     store=RunStore(tmp_path,demo,Clock.now(),'sim',False)
-    block=AnalogBlock('analog',1,10.,0.,1.,np.ones((7,1)),True)
+    block=AnalogBlock('analog',1,10.,0.,1.,np.ones((8,1)),True)
     with pytest.raises(ValueError,match='gap'):store.write(block)
     store.finalize('failed',[],[])
 
